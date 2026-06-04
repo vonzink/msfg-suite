@@ -56,6 +56,9 @@ public class BorrowerService {
                 .orElseThrow(() -> new NotFoundException("Borrower", borrowerId));
         if (req.firstName() != null) b.setFirstName(req.firstName());
         if (req.lastName() != null) b.setLastName(req.lastName());
+        // Only promotion is supported: primary=true clears the others. primary=false/null is a
+        // no-op — you promote a different borrower rather than demoting, so a loan with borrowers
+        // always has exactly one primary.
         if (Boolean.TRUE.equals(req.primary())) {
             clearOtherPrimaries(loanId, borrowerId);
             b.setPrimary(true);
@@ -69,7 +72,15 @@ public class BorrowerService {
         BorrowerParty b = borrowers.findById(borrowerId)
                 .filter(x -> x.getLoanId().equals(loanId))
                 .orElseThrow(() -> new NotFoundException("Borrower", borrowerId));
+        boolean wasPrimary = b.isPrimary();
         borrowers.delete(b);
+        if (wasPrimary) {
+            // Preserve the single-primary invariant: promote the lowest-ordinal remaining borrower.
+            borrowers.findByLoanIdOrderByOrdinalAsc(loanId).stream()
+                    .filter(x -> !x.getId().equals(borrowerId))
+                    .findFirst()
+                    .ifPresent(next -> next.setPrimary(true));
+        }
     }
 
     private void clearOtherPrimaries(UUID loanId, UUID exceptId) {

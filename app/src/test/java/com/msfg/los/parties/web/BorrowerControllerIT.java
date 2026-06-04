@@ -34,6 +34,15 @@ class BorrowerControllerIT extends AbstractIntegrationTest {
         return com.jayway.jsonpath.JsonPath.read(res.getResponse().getContentAsString(), "$.data.id");
     }
 
+    private String addBorrower(String loanId, String first, String last, boolean primary) throws Exception {
+        var res = mvc.perform(post("/api/loans/{id}/borrowers", loanId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"firstName\":\"%s\",\"lastName\":\"%s\",\"primary\":%s}".formatted(first, last, primary)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return com.jayway.jsonpath.JsonPath.read(res.getResponse().getContentAsString(), "$.data.id");
+    }
+
     @Test
     void addFirstBorrowerIsPrimaryAtOrdinalZero() throws Exception {
         String loanId = createLoan();
@@ -78,5 +87,18 @@ class BorrowerControllerIT extends AbstractIntegrationTest {
     void noToken401() throws Exception {
         mvc.perform(get("/api/loans/{id}/borrowers", UUID.randomUUID()))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void deletingPrimaryPromotesNextBorrower() throws Exception {
+        String loanId = createLoan();
+        String firstId = addBorrower(loanId, "A", "One", false);   // first → forced primary
+        addBorrower(loanId, "B", "Two", false);                    // ordinal 1, not primary
+        mvc.perform(delete("/api/loans/{l}/borrowers/{b}", loanId, firstId).with(lo()))
+                .andExpect(status().isNoContent());
+        mvc.perform(get("/api/loans/{l}/borrowers", loanId).with(lo()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].primary").value(true));   // remaining borrower promoted
     }
 }
