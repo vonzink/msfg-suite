@@ -8,3 +8,7 @@ spring:
       resourceserver:
         jwt:
           issuer-uri: ${COGNITO_ISSUER:https://cognito-idp.us-east-1.amazonaws.com/REPLACE_POOL_ID}
+los:
+  npi:
+    # Local-dev key only (not real NPI). dev/prod must supply LOS_NPI_KEY from the environment.
+    key: ${LOS_NPI_KEY:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}

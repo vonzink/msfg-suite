@@ -12,7 +12,9 @@ spring:
     locations: classpath:db/migration
 los:
   npi:
-    key: ${LOS_NPI_KEY:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
+    # No default — fail fast if LOS_NPI_KEY is unset (never silently encrypt NPI with a known key).
+    # Base-64 of a 32-byte AES-256 key. local/test profiles supply a dev key; dev/prod require the env var.
+    key: ${LOS_NPI_KEY}
 management:
   endpoints:
     web:

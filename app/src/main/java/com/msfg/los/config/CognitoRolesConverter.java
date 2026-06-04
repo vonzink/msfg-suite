@@ -14,7 +14,9 @@ public class CognitoRolesConverter implements Converter<Jwt, Collection<GrantedA
         Collection<GrantedAuthority> auths = new ArrayList<>();
         Object groups = jwt.getClaim("cognito:groups");
         if (groups instanceof Collection<?> g) {
-            for (Object role : g) auths.add(new SimpleGrantedAuthority("ROLE_" + role));
+            for (Object role : g) {
+                if (role != null) auths.add(new SimpleGrantedAuthority("ROLE_" + role));
+            }
         }
         return auths;
     }
