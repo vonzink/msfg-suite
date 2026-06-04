@@ -2,6 +2,20 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
+  mvc:
+    # Throw NoHandlerFoundException instead of forwarding to /error (which hits denyAll)
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false
 los:
   npi:
     key: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+management:
+  health:
+    # Disable DB health check so /actuator/health returns UP in tests without a live datasource validation
+    db:
+      enabled: false
+  endpoint:
+    health:
+      show-details: never
