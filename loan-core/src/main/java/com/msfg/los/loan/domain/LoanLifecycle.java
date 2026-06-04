@@ -11,6 +11,9 @@ import static com.msfg.los.loan.domain.LoanStatus.*;
 @Component
 public class LoanLifecycle {
 
+    // TODO Spec-2: SUSPENDED is a non-terminal dead-end here — it can only be WITHDRAWN/CANCELLED,
+    // there is no SUSPENDED -> IN_UNDERWRITING resume edge yet. Add the resume path when underwriting
+    // workflow lands. Similarly, CLOSING is currently ungated (consider requiring CLOSER).
     private static final Map<LoanStatus, Set<LoanStatus>> FORWARD = Map.of(
         STARTED, Set.of(APPLICATION_IN_PROGRESS),
         APPLICATION_IN_PROGRESS, Set.of(SUBMITTED),

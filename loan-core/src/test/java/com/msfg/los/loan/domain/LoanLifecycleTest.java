@@ -33,4 +33,14 @@ class LoanLifecycleTest {
         assertThatCode(() -> lifecycle.assertTransition(SUBMITTED, WITHDRAWN, Set.of(Role.LO.authority())))
             .doesNotThrowAnyException();
     }
+    @Test void adminBypassesRoleGate() {
+        assertThatCode(() -> lifecycle.assertTransition(IN_UNDERWRITING, APPROVED_WITH_CONDITIONS, Set.of(Role.ADMIN.authority())))
+            .doesNotThrowAnyException();
+    }
+    @Test void suspendedCanWithdrawButNotResume() {
+        assertThatCode(() -> lifecycle.assertTransition(SUSPENDED, WITHDRAWN, Set.of(Role.LO.authority())))
+            .doesNotThrowAnyException();
+        assertThatThrownBy(() -> lifecycle.assertTransition(SUSPENDED, IN_UNDERWRITING, Set.of(Role.ADMIN.authority())))
+            .isInstanceOf(ConflictException.class);
+    }
 }
