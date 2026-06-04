@@ -65,7 +65,10 @@ public class LoanService {
         if (req.lienPriority() != null) loan.setLienPriority(req.lienPriority());
         if (req.amortizationType() != null) loan.setAmortizationType(req.amortizationType());
         if (req.noteAmount() != null) loan.setNoteAmount(req.noteAmount());
+        // Hibernate returns null for an all-null @Embedded, so a reloaded address-less loan
+        // has a null SubjectProperty — instantiate before patching.
         SubjectProperty p = loan.getSubjectProperty();
+        if (p == null) { p = new SubjectProperty(); loan.setSubjectProperty(p); }
         if (req.addressLine1() != null) p.setAddressLine1(req.addressLine1());
         if (req.addressLine2() != null) p.setAddressLine2(req.addressLine2());
         if (req.city() != null) p.setCity(req.city());
@@ -76,7 +79,7 @@ public class LoanService {
     }
 
     @Transactional
-    public Loan transition(UUID id, TransitionRequest req, Set<String> authorities, String actorId) {
+    public Loan transition(UUID id, TransitionRequest req, Set<String> authorities) {
         Loan loan = get(id);
         LoanStatus from = loan.getStatus();
         lifecycle.assertTransition(from, req.targetStatus(), authorities);
@@ -86,6 +89,7 @@ public class LoanService {
         h.setFromStatus(from);
         h.setToStatus(req.targetStatus());
         h.setReason(req.reason());
+        // Actor is captured automatically on the history row via AuditableEntity.createdBy (JPA auditing).
         histories.save(h);
         return loan;
     }

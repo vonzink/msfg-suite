@@ -32,7 +32,7 @@ class LoanServiceIT extends AbstractIntegrationTest {
             LoanPurposeType.PURCHASE, null, null, null, null, LO));
         service.transition(loan.getId(),
             new TransitionRequest(LoanStatus.APPLICATION_IN_PROGRESS, "start"),
-            Set.of("ROLE_LO"), LO.toString());
+            Set.of("ROLE_LO"));
         assertThat(service.history(loan.getId())).hasSize(1);
         assertThat(service.history(loan.getId()).get(0).getToStatus())
             .isEqualTo(LoanStatus.APPLICATION_IN_PROGRESS);
@@ -44,7 +44,19 @@ class LoanServiceIT extends AbstractIntegrationTest {
             LoanPurposeType.PURCHASE, null, null, null, null, LO));
         assertThatThrownBy(() -> service.transition(loan.getId(),
             new TransitionRequest(LoanStatus.FUNDED, "x"),
-            Set.of("ROLE_ADMIN"), LO.toString()))
+            Set.of("ROLE_ADMIN")))
             .isInstanceOf(com.msfg.los.platform.error.ConflictException.class);
+    }
+
+    @Test
+    void updateSetsSubjectPropertyOnAddresslessLoan() {
+        // Regression: a reloaded address-less loan has a null @Embedded SubjectProperty;
+        // update must instantiate it rather than NPE.
+        Loan loan = service.create(new CreateLoanRequest(
+            LoanPurposeType.PURCHASE, null, null, null, null, LO));
+        Loan updated = service.update(loan.getId(), new UpdateLoanRequest(
+            null, null, null, null, "5345 S Flanders Way", null, "Centennial", "CO", "80015", null));
+        assertThat(updated.getSubjectProperty().getCity()).isEqualTo("Centennial");
+        assertThat(updated.getSubjectProperty().getState()).isEqualTo("CO");
     }
 }

@@ -65,7 +65,7 @@ public class LoanController {
     public ApiResponse<LoanSummaryResponse> transition(@PathVariable UUID id, @Valid @RequestBody TransitionRequest req) {
         Loan loan = service.get(id);
         accessGuard.assertCanAccess(loan);
-        Loan updated = service.transition(id, req, currentUser.roles(), currentUser.id().orElse("system"));
+        Loan updated = service.transition(id, req, currentUser.roles());
         return ApiResponse.ok(LoanSummaryResponse.from(updated));
     }
 }
