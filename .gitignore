@@ -8,3 +8,6 @@ build/
 .env
 bin/
 out/
+
+# Testcontainers host config is machine-specific — set via build.gradle guard or DOCKER_HOST, never committed
+**/src/test/resources/testcontainers.properties

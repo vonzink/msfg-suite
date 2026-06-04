@@ -106,3 +106,6 @@ issuer URI), **`DB_URL`/`DB_USER`/`DB_PASSWORD`**.
 - **`loanOfficerId` from principal:** create currently takes the owner in the request body; a later
   spec should default it to the authenticated user (admins may override).
 - **Lifecycle:** add a `SUSPENDED → IN_UNDERWRITING` resume edge and consider gating `CLOSING` to `CLOSER`.
+- **Single-primary borrower** is enforced in the service layer. Consider a DB-level guard
+  (a partial unique index on `borrower_party(loan_id) where is_primary`) once flush-ordering
+  during primary-swap is handled (clear-then-set must not transiently violate the constraint).
