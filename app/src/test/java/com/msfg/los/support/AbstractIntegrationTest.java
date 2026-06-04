@@ -3,25 +3,36 @@ package com.msfg.los.support;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 @SpringBootTest
 @ActiveProfiles("test")
 @AutoConfigureMockMvc
-@Testcontainers
 @Import(AbstractIntegrationTest.TestBeans.class)
 public abstract class AbstractIntegrationTest {
 
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16");
+    // Singleton container — started once per JVM, never stopped by the JUnit5 extension.
+    // @Testcontainers + @Container on a superclass stops the container after each subclass
+    // (even static containers), which kills the pool for the next class in the same JVM run.
+    static final PostgreSQLContainer<?> POSTGRES;
+
+    static {
+        POSTGRES = new PostgreSQLContainer<>("postgres:16");
+        POSTGRES.start();
+    }
+
+    @DynamicPropertySource
+    static void datasource(DynamicPropertyRegistry reg) {
+        reg.add("spring.datasource.url", POSTGRES::getJdbcUrl);
+        reg.add("spring.datasource.username", POSTGRES::getUsername);
+        reg.add("spring.datasource.password", POSTGRES::getPassword);
+    }
 
     @TestConfiguration
     static class TestBeans {

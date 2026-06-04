@@ -27,9 +27,9 @@ class SecurityConfigTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void authenticatedPassesSecurity_noHandlerYet_404() throws Exception {
+    void authenticatedPassesSecurity() throws Exception {
         mvc.perform(get("/api/loans").with(jwt().authorities(new SimpleGrantedAuthority("ROLE_LO"))))
-            .andExpect(status().isNotFound());
+            .andExpect(status().isOk());
     }
 
     @Test
@@ -39,8 +39,11 @@ class SecurityConfigTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void loRolePassesCreateAuthz_noHandlerYet_404() throws Exception {
-        mvc.perform(post("/api/loans").with(jwt().authorities(new SimpleGrantedAuthority("ROLE_LO"))))
-            .andExpect(status().isNotFound());
+    void loRolePassesCreateAuthz_400WithoutBody() throws Exception {
+        // Send an empty JSON object so Spring can parse the body; @NotNull constraints fire → 400
+        mvc.perform(post("/api/loans").with(jwt().authorities(new SimpleGrantedAuthority("ROLE_LO")))
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .content("{}"))
+            .andExpect(status().isBadRequest());
     }
 }
