@@ -15,7 +15,11 @@ public class NpiCipher {
     private final SecureRandom random = new SecureRandom();
 
     public NpiCipher(String base64Key) {
-        this.key = new SecretKeySpec(Base64.getDecoder().decode(base64Key), "AES");
+        byte[] raw = Base64.getDecoder().decode(base64Key);
+        if (raw.length != 32) {
+            throw new IllegalArgumentException("AES-256 NPI key must be 32 bytes, got " + raw.length);
+        }
+        this.key = new SecretKeySpec(raw, "AES");
     }
     public String encrypt(String plain) {
         if (plain == null) return null;

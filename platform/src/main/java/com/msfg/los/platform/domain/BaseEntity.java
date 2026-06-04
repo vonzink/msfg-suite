@@ -5,7 +5,7 @@ import java.util.UUID;
 
 @MappedSuperclass
 public abstract class BaseEntity {
-    @Id @GeneratedValue private UUID id;
+    @Id @GeneratedValue(strategy = GenerationType.UUID) private UUID id;
     @Version private Long version;
     public UUID getId() { return id; }
     public Long getVersion() { return version; }

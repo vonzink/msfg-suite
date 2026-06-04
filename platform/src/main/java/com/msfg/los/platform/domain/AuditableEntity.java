@@ -1,4 +1,5 @@
 package com.msfg.los.platform.domain;
+import jakarta.persistence.Column;
 import jakarta.persistence.EntityListeners;
 import jakarta.persistence.MappedSuperclass;
 import org.springframework.data.annotation.CreatedBy;
@@ -11,8 +12,8 @@ import java.time.Instant;
 @MappedSuperclass
 @EntityListeners(AuditingEntityListener.class)
 public abstract class AuditableEntity extends BaseEntity {
-    @CreatedDate private Instant createdAt;
-    @CreatedBy private String createdBy;
+    @CreatedDate @Column(updatable = false) private Instant createdAt;
+    @CreatedBy @Column(updatable = false) private String createdBy;
     @LastModifiedDate private Instant updatedAt;
     @LastModifiedBy private String updatedBy;
     public Instant getCreatedAt() { return createdAt; }
