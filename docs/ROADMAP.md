@@ -3,8 +3,12 @@
 The living plan. Each phase is its own **spec → plan → build** cycle (see `docs/specs/` and
 `docs/superpowers/plans/`). UWM EASE intel that informs each subsystem lives in `docs/reference/`.
 
+**Platform shape:** **multi-tenant SaaS** (many lender companies, small→large) — shared DB, `org_id` on
+every row + Postgres RLS; **everything external behind ports** (storage, auth, AI, email, payments,
+webhooks) so the backend is a cloud-agnostic Docker image. MSFG is tenant #1.
+
 **Conventions carried from Spec 1:** modular monolith, MISMO/ULAD-aligned model, ports-and-adapters
-for vendors (stub-first), Cognito JWT, loan-scoped access, Flyway, TDD. UWM is loan-scoped
+(stub-first), tenant- + loan-scoped access, Flyway, TDD. UWM is loan-scoped
 `/Loan/{loanId}/{borrowerId}/{Controller}/{Action}` — our REST mirrors it (`/api/loans/{id}/...`).
 
 ---
@@ -15,16 +19,28 @@ borrowers, NPI crypto, Cognito security. `platform · app · loan-core · partie
 
 ---
 
-## Milestone 1 — The 1003 (URLA application)  ← NEXT
-The data heart. Maps 1:1 to UWM's `Origination`-area controllers. Builds entirely on the spine.
+## Milestone 0.5 — Platform Foundation (multi-tenancy + portability)  ← NEXT (Spec 2)
+Lands **before** the 1003, while the schema is tiny (cheap to retrofit; avoids the end-of-project rebuild).
+- **Organization (tenant)** entity + admin provisioning; **platform-admin** role above tenant roles.
+- **`org_id` on every domain table** (loan, borrower_party, loan_status_history, + all future) with
+  backfill; **TenantContext** (current org from the JWT claim) + tenant-scoped access; **Postgres RLS**
+  as defense-in-depth.
+- **Per-tenant config** store (settings, feature flags, integration + AI credentials — secrets encrypted
+  via the NPI cipher).
+- **Ports-and-adapters convention** established: **auth port** (Cognito adapter today, swappable) + the
+  seams reserved for storage / AI / email / payments / webhooks (built with their features).
+- Local-dev gets a default org so `bootRun` still works.
+
+## Milestone 1 — The 1003 (URLA application)
+The data heart. Maps 1:1 to UWM's `Origination`-area controllers. Sits on the multi-tenant spine.
 
 | Spec | Delivers | UWM analog |
 |---|---|---|
-| **S2** | Personal Information — full borrower PII, addresses, contact, citizenship (NPI encryption goes live) | `Borrower` |
-| **S3** | Employment & Income — income entities, doc-less VOI/tax-transcript status | `Income` |
-| **S4** | Assets & Liabilities — entity grids, verification, DTI include/exclude | `Asset`, `LoanLiabilities` |
-| **S5** | REO + Loan Information + **calc engine** (LTV/CLTV/TLTV, DTI, Housing Expense comparison, Details-of-Transaction ledger, cash-to-close) | `RealEstate`, `LoanInformation`, `Expense`, `DetailsOfTransaction` |
-| **S6** | Declarations + Government Monitoring (HMDA demographics, per-borrower Q&A) | `Declarations`, `GovernmentMonitoring` |
+| **S3** | Personal Information — full borrower PII, addresses, contact, citizenship (NPI encryption goes live) | `Borrower` |
+| **S4** | Employment & Income — income entities, doc-less VOI/tax-transcript status | `Income` |
+| **S5** | Assets & Liabilities — entity grids, verification, DTI include/exclude | `Asset`, `LoanLiabilities` |
+| **S6** | REO + Loan Information + **calc engine** (LTV/CLTV/TLTV, DTI, Housing Expense comparison, Details-of-Transaction ledger, cash-to-close) | `RealEstate`, `LoanInformation`, `Expense`, `DetailsOfTransaction` |
+| **S7** | Declarations + Government Monitoring (HMDA demographics, per-borrower Q&A) | `Declarations`, `GovernmentMonitoring` |
 
 → **Full 1003 complete.** MISMO 3.4 (iLAD) import/export becomes feasible (`FnmaImport`, 3.4 export).
 
@@ -70,7 +86,21 @@ Loan Lab · Ultimate Submission progress.
 
 ---
 
+## Milestone 6 — Platform capabilities (cross-tenant; each its own spec)
+- **AI platform** — one `AiPort` with **OpenAI / Anthropic-Claude / DeepSeek** adapters; provider, model,
+  and API key selectable **per tenant** (keys stored encrypted in tenant config). Use cases TBD per
+  feature (doc summarization, condition drafting, borrower comms, classification).
+- **Partner API + webhooks** — a **public/partner REST API** + **signed inbound/outbound webhooks** so
+  other companies' systems exchange data with the LOS. Per-tenant API keys / OAuth clients, webhook
+  subscriptions, HMAC signing, delivery retries + dead-letter, event catalog (loan.created,
+  status.changed, condition.cleared, …). Builds on the Milestone-0.5 multi-tenant + ports foundation.
+- **Tenant admin & onboarding** — provision a company, its branding, users, integration + AI config,
+  feature flags, plan/limits.
+
 ## Cross-cutting subsystems (built incrementally, behind ports)
+- **Multi-tenancy** — `org_id` everywhere + RLS + TenantContext (foundation in Milestone 0.5; every new
+  table/endpoint inherits it).
+- **Cloud portability** — storage / auth / AI / email / payments adapters; Docker image runs anywhere.
 - **Disclosure / UCD / eSign pipeline** — the spine connecting Generate Documents, CD, Change of
   Circumstance, UCD results, disclosure history. A major cluster; design its data model deliberately.
 - **Stripe payments** — appraisal + closing invoices (two confirmed surfaces).
