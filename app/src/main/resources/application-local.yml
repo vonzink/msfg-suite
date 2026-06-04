@@ -3,11 +3,9 @@ spring:
     url: jdbc:postgresql://localhost:5432/msfg_los
     username: los
     password: los
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          issuer-uri: ${COGNITO_ISSUER:https://cognito-idp.us-east-1.amazonaws.com/REPLACE_POOL_ID}
+# No oauth2 resource-server here: the 'local' profile uses LocalDevSecurityConfig (a fixed dev
+# ADMIN principal), so the app boots and is testable without a reachable Cognito issuer.
+# dev/prod set spring.security.oauth2.resourceserver.jwt.issuer-uri to the real Cognito pool.
 los:
   npi:
     # Local-dev key only (not real NPI). dev/prod must supply LOS_NPI_KEY from the environment.
