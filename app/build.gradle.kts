@@ -33,13 +33,15 @@ dependencies {
 }
 
 tasks.withType<Test> {
-    // Docker Desktop on macOS: its security proxy enforces Docker API ≥1.44 for
-    // certain clients. docker-java defaults to sending /v1.32/ URLs.
-    // - tc.host: forces TestcontainersHostPropertyClientProviderStrategy (bypasses
-    //   broken UnixSocket/DockerDesktop strategies that hit the CLI proxy socket)
-    // - api.version: docker-java reads this from System.getProperties() via
-    //   DefaultDockerClientConfig.createDefaultConfigBuilder() → fixes the 400
-    val dockerSock = "unix:///Users/${System.getProperty("user.name")}/.docker/run/docker.sock"
-    systemProperty("tc.host", dockerSock)
-    systemProperty("api.version", "1.44")
+    // Local macOS Docker Desktop quirk: Testcontainers can't reach the daemon via the default
+    // /var/run/docker.sock, and Docker Desktop's proxy enforces Docker API >=1.44 (docker-java
+    // otherwise sends /v1.32/ and gets a 400). Apply the workaround ONLY for local dev — when
+    // DOCKER_HOST is unset AND the per-user Docker Desktop socket exists. On CI/Linux/colima
+    // (DOCKER_HOST set or socket absent) this is skipped and Testcontainers' defaults are used,
+    // keeping the build portable.
+    val userSock = file("${System.getProperty("user.home")}/.docker/run/docker.sock")
+    if (System.getenv("DOCKER_HOST") == null && userSock.exists()) {
+        systemProperty("tc.host", "unix://${userSock.absolutePath}")
+        systemProperty("api.version", "1.44")
+    }
 }
