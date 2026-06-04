@@ -1,0 +1,10 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/msfg_los
+    username: los
+    password: los
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${COGNITO_ISSUER:https://cognito-idp.us-east-1.amazonaws.com/REPLACE_POOL_ID}
