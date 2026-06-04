@@ -94,9 +94,10 @@ issuer URI), **`DB_URL`/`DB_USER`/`DB_PASSWORD`**.
 
 ## Docs
 
-- Design / spec: `docs/specs/2026-06-03-los-spec1-foundation-loan-spine.md`
-- Implementation plan: `docs/superpowers/plans/2026-06-03-los-spec1-foundation-loan-spine.md`
-- UWM EASE reference (the model): `docs/reference/`
+- **Roadmap (the full forward plan): [`docs/ROADMAP.md`](docs/ROADMAP.md)** — all milestones/subsystems
+- Spec 1 design + plan: `docs/specs/` and `docs/superpowers/plans/`
+- UWM EASE reference (the model we follow): `docs/reference/` — schematics, wireframes, the
+  ~65-route registry, and back-end intel for Generate Documents, Appraisal, VVOE, Change of Circumstance
 
 ## Known Spec-1 follow-ups (tracked for later)
 
