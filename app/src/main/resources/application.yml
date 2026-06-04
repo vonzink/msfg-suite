@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: msfg-los
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+los:
+  npi:
+    # No default — fail fast if LOS_NPI_KEY is unset (never silently encrypt NPI with a known key).
+    # Base-64 of a 32-byte AES-256 key. local/test profiles supply a dev key; dev/prod require the env var.
+    key: ${LOS_NPI_KEY}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html

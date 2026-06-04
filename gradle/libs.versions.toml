@@ -1,0 +1,12 @@
+[versions]
+springBoot = "3.3.5"
+springDepMgmt = "1.1.6"
+springdoc = "2.6.0"
+testcontainers = "1.20.3"
+
+[libraries]
+springdoc-openapi = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
+
+[plugins]
+spring-boot = { id = "org.springframework.boot", version.ref = "springBoot" }
+spring-dep-mgmt = { id = "io.spring.dependency-management", version.ref = "springDepMgmt" }
