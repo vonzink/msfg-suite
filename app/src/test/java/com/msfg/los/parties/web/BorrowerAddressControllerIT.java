@@ -40,6 +40,14 @@ class BorrowerAddressControllerIT extends AbstractIntegrationTest {
         return com.jayway.jsonpath.JsonPath.read(res.getResponse().getContentAsString(), "$.data.id");
     }
 
+    private String addAddress(String loanId, String borrowerId, String type) throws Exception {
+        var res = mvc.perform(post("/api/loans/{l}/borrowers/{b}/addresses", loanId, borrowerId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"addressType\":\"%s\",\"city\":\"Denver\",\"state\":\"CO\"}".formatted(type)))
+                .andExpect(status().isCreated()).andReturn();
+        return com.jayway.jsonpath.JsonPath.read(res.getResponse().getContentAsString(), "$.data.id");
+    }
+
     @Test
     void addPresentAddressThenList() throws Exception {
         String loanId = createLoan();
@@ -72,5 +80,31 @@ class BorrowerAddressControllerIT extends AbstractIntegrationTest {
     void noToken401() throws Exception {
         mvc.perform(get("/api/loans/{l}/borrowers/{b}/addresses", UUID.randomUUID(), UUID.randomUUID()))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void updateAddressPatchesFields() throws Exception {
+        String loanId = createLoan();
+        String borrowerId = addBorrower(loanId);
+        String addressId = addAddress(loanId, borrowerId, "PRESENT");
+        mvc.perform(patch("/api/loans/{l}/borrowers/{b}/addresses/{a}", loanId, borrowerId, addressId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"city\":\"Aurora\",\"rentVerified\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.city").value("Aurora"))
+                .andExpect(jsonPath("$.data.rentVerified").value(true))
+                .andExpect(jsonPath("$.data.state").value("CO"));   // unchanged by the patch
+    }
+
+    @Test
+    void deleteAddressRemovesIt() throws Exception {
+        String loanId = createLoan();
+        String borrowerId = addBorrower(loanId);
+        String addressId = addAddress(loanId, borrowerId, "MAILING");
+        mvc.perform(delete("/api/loans/{l}/borrowers/{b}/addresses/{a}", loanId, borrowerId, addressId).with(lo()))
+                .andExpect(status().isNoContent());
+        mvc.perform(get("/api/loans/{l}/borrowers/{b}/addresses", loanId, borrowerId).with(lo()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(0));
     }
 }
