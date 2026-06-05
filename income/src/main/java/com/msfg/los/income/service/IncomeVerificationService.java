@@ -8,7 +8,6 @@ import com.msfg.los.income.verification.OrderIncomeVerificationCommand;
 import com.msfg.los.income.web.dto.OrderVerificationRequest;
 import com.msfg.los.loan.service.LoanAccessGuard;
 import com.msfg.los.loan.service.LoanService;
-import com.msfg.los.platform.tenancy.TenantContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,18 +22,15 @@ public class IncomeVerificationService {
     private final IncomeVerificationPort port;
     private final LoanService loanService;
     private final LoanAccessGuard accessGuard;
-    private final TenantContext tenantContext;
 
     public IncomeVerificationService(IncomeVerificationRepository verifications,
                                      IncomeVerificationPort port,
                                      LoanService loanService,
-                                     LoanAccessGuard accessGuard,
-                                     TenantContext tenantContext) {
+                                     LoanAccessGuard accessGuard) {
         this.verifications = verifications;
         this.port = port;
         this.loanService = loanService;
         this.accessGuard = accessGuard;
-        this.tenantContext = tenantContext;
     }
 
     @Transactional
