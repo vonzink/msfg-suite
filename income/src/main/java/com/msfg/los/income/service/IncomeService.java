@@ -103,12 +103,9 @@ public class IncomeService {
 
         validate(borrowerId, effectiveType, effectiveAmount, effectiveEmploymentId);
 
-        if (req.incomeType() != null) {
-            item.setIncomeType(req.incomeType());
-            if (!req.incomeType().isEmployment()) item.setEmploymentId(null);   // clear paired field on type switch
-        }
+        if (req.incomeType() != null) item.setIncomeType(req.incomeType());
         if (req.monthlyAmount() != null) item.setMonthlyAmount(req.monthlyAmount());
-        if (req.employmentId() != null) item.setEmploymentId(req.employmentId());
+        item.setEmploymentId(effectiveEmploymentId);   // authoritative: already merged + null-cleared for type switches
         if (req.description() != null) item.setDescription(req.description());
 
         return item;
