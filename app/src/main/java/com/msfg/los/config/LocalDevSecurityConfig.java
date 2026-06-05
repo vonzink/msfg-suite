@@ -48,6 +48,7 @@ public class LocalDevSecurityConfig {
     SecurityFilterChain localFilterChain(HttpSecurity http) throws Exception {
         log.warn("=== LOCAL DEV SECURITY ACTIVE: all requests run as dev ADMIN ({}). NEVER use the 'local' profile in production. ===", DEV_USER_ID);
         http
+            .cors(org.springframework.security.config.Customizer.withDefaults())
             .csrf(c -> c.disable())
             .authorizeHttpRequests(reg -> reg.anyRequest().permitAll())
             // AFTER SecurityContextHolderFilter: that filter loads (and later clears) the context,
