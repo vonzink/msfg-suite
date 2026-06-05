@@ -38,8 +38,8 @@ The data heart. Maps 1:1 to UWM's `Origination`-area controllers. Sits on the mu
 
 | Spec | Delivers | UWM analog |
 |---|---|---|
-| **S3** | Personal Information — full borrower PII, addresses, contact, citizenship (NPI encryption goes live) | `Borrower` |
-| **S4** | Employment & Income — income entities, doc-less VOI/tax-transcript status | `Income` |
+| ✅ **S3** | Personal Information — full borrower PII, addresses, contact, citizenship (NPI encryption LIVE: encrypted/masked SSN + audited reveal). **DONE, merged `30361eb`, 56 tests.** | `Borrower` |
+| 🔵 **S4** | Employment & Income — income entities, doc-less VOI/tax-transcript status — **NEXT** | `Income` |
 | **S5** | Assets & Liabilities — entity grids, verification, DTI include/exclude | `Asset`, `LoanLiabilities` |
 | **S6** | REO + Loan Information + **calc engine** (LTV/CLTV/TLTV, DTI, Housing Expense comparison, Details-of-Transaction ledger, cash-to-close) | `RealEstate`, `LoanInformation`, `Expense`, `DetailsOfTransaction` |
 | **S7** | Declarations + Government Monitoring (HMDA demographics, per-borrower Q&A) | `Declarations`, `GovernmentMonitoring` |

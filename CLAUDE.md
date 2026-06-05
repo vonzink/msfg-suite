@@ -10,7 +10,8 @@ auth / deploy) — NOT the Node/MySQL dashboard at dashboard.msfgco.com.
 ## Status
 - ✅ **Spec 1 — Foundation + Core Loan Spine** — done + merged (`f2437ad`), 37 tests.
 - ✅ **Spec 2 — Platform Foundation (multi-tenancy + portability)** — done + merged (`31d190a`), 44 tests.
-- 🔵 **Spec 3 — Personal Information & PII** — NEXT; designed (NPI encryption goes live on the multi-tenant base).
+- ✅ **Spec 3 — Personal Information & PII** — done + merged (`30361eb`), 56 tests. NPI encryption is LIVE (encrypted/masked SSN + audited reveal).
+- 🔵 **Spec 4 — Employment & Income** — NEXT (the 1003 continues).
 
 ## North-star requirements (design for these from the beginning)
 1. **Multi-tenant** — many companies, small→large; per-tenant data isolation, users, config,
