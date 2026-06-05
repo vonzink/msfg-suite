@@ -98,10 +98,15 @@ public class IncomeService {
         IncomeType effectiveType = req.incomeType() != null ? req.incomeType() : item.getIncomeType();
         BigDecimal effectiveAmount = req.monthlyAmount() != null ? req.monthlyAmount() : item.getMonthlyAmount();
         UUID effectiveEmploymentId = req.employmentId() != null ? req.employmentId() : item.getEmploymentId();
+        // clear paired field when switching to a non-employment type
+        if (req.incomeType() != null && !req.incomeType().isEmployment()) effectiveEmploymentId = null;
 
         validate(borrowerId, effectiveType, effectiveAmount, effectiveEmploymentId);
 
-        if (req.incomeType() != null) item.setIncomeType(req.incomeType());
+        if (req.incomeType() != null) {
+            item.setIncomeType(req.incomeType());
+            if (!req.incomeType().isEmployment()) item.setEmploymentId(null);   // clear paired field on type switch
+        }
         if (req.monthlyAmount() != null) item.setMonthlyAmount(req.monthlyAmount());
         if (req.employmentId() != null) item.setEmploymentId(req.employmentId());
         if (req.description() != null) item.setDescription(req.description());

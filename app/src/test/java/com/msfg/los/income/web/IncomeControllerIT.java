@@ -249,6 +249,52 @@ class IncomeControllerIT extends AbstractIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
+    // --- PATCH partial-update coverage ---
+
+    @Test
+    void patchUpdatesAmountLeavesOthersUnchanged() throws Exception {
+        String loanId = createLoan();
+        String borrowerId = addBorrower(loanId);
+
+        // create a non-employment income item
+        var res = mvc.perform(post("/api/loans/{l}/borrowers/{b}/income", loanId, borrowerId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"incomeType\":\"SOCIAL_SECURITY\",\"monthlyAmount\":1000,\"description\":\"SSA\"}"))
+                .andExpect(status().isCreated()).andReturn();
+        String incomeId = com.jayway.jsonpath.JsonPath.read(res.getResponse().getContentAsString(), "$.data.id");
+
+        // PATCH only the amount
+        mvc.perform(patch("/api/loans/{l}/borrowers/{b}/income/{i}", loanId, borrowerId, incomeId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"monthlyAmount\":1200}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.monthlyAmount").value(1200))
+                .andExpect(jsonPath("$.data.incomeType").value("SOCIAL_SECURITY"))
+                .andExpect(jsonPath("$.data.description").value("SSA"));
+    }
+
+    @Test
+    void patchCanConvertEmploymentIncomeToOtherSource() throws Exception {
+        String loanId = createLoan();
+        String borrowerId = addBorrower(loanId);
+        String empId = addEmployment(loanId, borrowerId);
+
+        // create a BASE income linked to the employment
+        var res = mvc.perform(post("/api/loans/{l}/borrowers/{b}/income", loanId, borrowerId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"incomeType\":\"BASE\",\"monthlyAmount\":5000,\"employmentId\":\"%s\"}".formatted(empId)))
+                .andExpect(status().isCreated()).andReturn();
+        String incomeId = com.jayway.jsonpath.JsonPath.read(res.getResponse().getContentAsString(), "$.data.id");
+
+        // PATCH only incomeType to a non-employment type — employmentId must clear
+        mvc.perform(patch("/api/loans/{l}/borrowers/{b}/income/{i}", loanId, borrowerId, incomeId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"incomeType\":\"SOCIAL_SECURITY\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.incomeType").value("SOCIAL_SECURITY"))
+                .andExpect(jsonPath("$.data.employmentId").doesNotExist());
+    }
+
     // --- no token 401 ---
 
     @Test
