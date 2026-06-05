@@ -134,11 +134,13 @@ public class EmploymentService {
             throw new ValidationException("ownershipShare requires selfEmployed=true");
         if (se && e.getOwnershipShare() == null)
             throw new ValidationException("ownershipShare is required when selfEmployed=true");
-        if (!se && e.getEmployerName() == null)
+        if (!se && (e.getEmployerName() == null || e.getEmployerName().isBlank()))
             throw new ValidationException("employerName is required unless selfEmployed=true");
-        if (EmploymentStatusType.PREVIOUS.equals(e.getEmploymentStatus())
-                && e.getStartDate() != null && e.getEndDate() != null
-                && e.getEndDate().isBefore(e.getStartDate()))
-            throw new ValidationException("endDate must be on or after startDate");
+        if (e.getEmploymentStatus() == EmploymentStatusType.PREVIOUS) {
+            if (e.getEndDate() == null)
+                throw new ValidationException("endDate is required for PREVIOUS employment");
+            if (e.getStartDate() != null && e.getEndDate().isBefore(e.getStartDate()))
+                throw new ValidationException("endDate must be on or after startDate");
+        }
     }
 }

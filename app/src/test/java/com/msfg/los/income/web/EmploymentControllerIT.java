@@ -90,7 +90,7 @@ class EmploymentControllerIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void employerNameRequiredUnlessSefl() throws Exception {
+    void employerNameRequiredUnlessSelf() throws Exception {
         String loanId = createLoan();
         String borrowerId = addBorrower(loanId);
         // no employerName, selfEmployed not set → 400
@@ -156,5 +156,30 @@ class EmploymentControllerIT extends AbstractIntegrationTest {
     void noToken401() throws Exception {
         mvc.perform(get("/api/loans/{l}/borrowers/{b}/employments", UUID.randomUUID(), UUID.randomUUID()))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void previousEmploymentRequiresEndDate() throws Exception {
+        String loanId = createLoan();
+        String borrowerId = addBorrower(loanId);
+        // PREVIOUS with startDate but no endDate → 400
+        mvc.perform(post("/api/loans/{l}/borrowers/{b}/employments", loanId, borrowerId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"employerName\":\"Old Co\",\"employmentStatus\":\"PREVIOUS\"," +
+                                 "\"startDate\":\"2018-01-01\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void selfEmployedWithOwnershipShareReturns201() throws Exception {
+        String loanId = createLoan();
+        String borrowerId = addBorrower(loanId);
+        // selfEmployed=true + ownershipShare → 201, response echoes selfEmployed=true
+        mvc.perform(post("/api/loans/{l}/borrowers/{b}/employments", loanId, borrowerId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"selfEmployed\":true,\"ownershipShare\":\"GREATER_OR_EQUAL_25\"," +
+                                 "\"startDate\":\"2015-06-01\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.selfEmployed").value(true));
     }
 }
