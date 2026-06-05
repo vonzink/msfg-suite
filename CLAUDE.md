@@ -9,12 +9,12 @@ auth / deploy) — NOT the Node/MySQL dashboard at dashboard.msfgco.com.
 
 ## Status
 - ✅ **Spec 1 — Foundation + Core Loan Spine** — done + merged (`f2437ad`), 37 tests.
-- 🔵 **Spec 2 — Platform Foundation (multi-tenancy + portability seams)** — NEXT (decided: build before the 1003).
-- 📐 **Spec 3 — Personal Information & PII** — designed + approved; resumes on the multi-tenant base.
+- ✅ **Spec 2 — Platform Foundation (multi-tenancy + portability)** — done + merged (`31d190a`), 44 tests.
+- 🔵 **Spec 3 — Personal Information & PII** — NEXT; designed (NPI encryption goes live on the multi-tenant base).
 
 ## North-star requirements (design for these from the beginning)
 1. **Multi-tenant** — many companies, small→large; per-tenant data isolation, users, config,
-   integrations, branding. *[isolation model = open decision]*
+   integrations, branding. *(Built in Spec 2: shared DB + `org_id` + `@TenantId` + RLS.)*
 2. **Cloud-portable** — backend ships as a **Docker image**, not locked to AWS. AWS-specific services
    (S3 storage, Cognito auth) sit behind **ports** so they're swappable (GCP, Fly.io, Render, a VPS…).
    ⚠️ The Spring Boot backend runs as a long-lived container — it does **not** run on Vercel. Vercel/

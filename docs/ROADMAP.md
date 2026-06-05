@@ -19,8 +19,10 @@ borrowers, NPI crypto, Cognito security. `platform · app · loan-core · partie
 
 ---
 
-## Milestone 0.5 — Platform Foundation (multi-tenancy + portability)  ← NEXT (Spec 2)
-Lands **before** the 1003, while the schema is tiny (cheap to retrofit; avoids the end-of-project rebuild).
+## ✅ Milestone 0.5 — Platform Foundation (multi-tenancy + portability) — DONE (Spec 2, merged `31d190a`, 44 tests)
+Landed **before** the 1003, while the schema was tiny. `tenancy` module + `org_id`/`@TenantId` on every
+domain row + Postgres RLS (FORCE/WITH CHECK) + tenant context/filter + PLATFORM_ADMIN. Boot-verified.
+Follow-ups (CLAUDE.md): engage RLS at runtime via a non-owner DB role; `BorrowerService` self-scoping.
 - **Organization (tenant)** entity + admin provisioning; **platform-admin** role above tenant roles.
 - **`org_id` on every domain table** (loan, borrower_party, loan_status_history, + all future) with
   backfill; **TenantContext** (current org from the JWT claim) + tenant-scoped access; **Postgres RLS**
