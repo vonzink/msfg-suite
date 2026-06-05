@@ -64,9 +64,17 @@ reasonable calls, he'll redirect. Verify by running the thing, not just assertin
 `docs/ROADMAP.md` (forward plan) · `docs/specs/` · `docs/superpowers/plans/` · `docs/reference/` (UWM EASE intel).
 
 ## Decided (architecture)
-- **Tenant isolation:** shared database, **`org_id` on every domain row**, all queries tenant-filtered +
-  **Postgres row-level security** as defense-in-depth. A large/regulated tenant can later be promoted to
-  a dedicated schema/DB without app changes.
+- **Tenant isolation (built in Spec 2):** shared database, **`org_id` on every domain row**. Two layers:
+  (1) **app layer — Hibernate `@TenantId`** (auto-filters JPQL reads, auto-stamps writes) from the JWT
+  `org_id` claim — this is the **active runtime enforcement**; **load tenant-scoped entities by
+  `findByIdAndOrgId`, NOT `findById`** (`@TenantId` does NOT filter `find()`-by-PK). (2) **Postgres RLS**
+  (`FORCE` + `WITH CHECK`, fail-closed) — a **proven backstop that only engages when the app connects as a
+  non-owner DB role**. ⚠️ **DEPLOYMENT REQUIREMENT:** in dev/prod, run the app's datasource as a
+  **non-owner role** (the seeded `app_user`, given a login/password out-of-band) with **Flyway as the
+  owner**, or RLS is bypassed at runtime (today the app connects as owner → app-layer only). A
+  large/regulated tenant can later be promoted to a dedicated schema/DB without app changes.
+  - *Spec-2 follow-ups:* engage RLS at runtime (non-owner datasource); `BorrowerService` self-scoping
+    `findByIdAndOrgId`; reject JWTs with no `org_id` claim (avoid NIL-org writes); ADMIN-role cross-tenant test.
 - **Portability:** **all external services behind ports** with swappable adapters (storage, auth, AI,
   email, payments, webhooks). Backend = a Docker image that runs on any cloud. **Cognito is the current
   auth adapter**, swappable for Auth0/Keycloak via the auth port. Config-driven per env/tenant.
@@ -74,4 +82,4 @@ reasonable calls, he'll redirect. Verify by running the thing, not just assertin
 - **AI:** provider-agnostic (`AiPort`) with OpenAI / Anthropic-Claude / DeepSeek adapters; provider+model+key per tenant. (Own spec.)
 - **Integrations:** partner REST API + signed inbound/outbound webhooks, per tenant. (Own milestone.)
 
-Still open (decide when we reach them): one-org-per-user vs multi-org users; per-tenant subdomain routing.
+Decided in Spec 2: **one company per user** (single `org_id` JWT claim). Still open: multi-org users (later); per-tenant subdomain routing.

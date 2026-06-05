@@ -1,6 +1,6 @@
 package com.msfg.los.parties.domain;
 
-import com.msfg.los.platform.domain.AuditableEntity;
+import com.msfg.los.platform.domain.TenantScopedEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -11,7 +11,7 @@ import java.util.UUID;
 @Table(name = "borrower_party")
 @Getter
 @Setter
-public class BorrowerParty extends AuditableEntity {
+public class BorrowerParty extends TenantScopedEntity {
 
     @Column(nullable = false)
     private UUID loanId;

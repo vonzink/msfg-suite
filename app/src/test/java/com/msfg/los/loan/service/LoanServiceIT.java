@@ -2,7 +2,9 @@ package com.msfg.los.loan.service;
 
 import com.msfg.los.loan.domain.*;
 import com.msfg.los.loan.web.dto.*;
+import com.msfg.los.platform.tenancy.TenantContextHolder;
 import com.msfg.los.support.AbstractIntegrationTest;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import java.util.Set;
@@ -16,6 +18,11 @@ class LoanServiceIT extends AbstractIntegrationTest {
     LoanService service;
 
     static final UUID LO = UUID.randomUUID();
+
+    @BeforeEach
+    void setOrg() {
+        TenantContextHolder.set(UUID.fromString(DEFAULT_ORG));
+    }
 
     @Test
     void createsLoanWithGeneratedNumberAndStartedStatus() {

@@ -22,7 +22,8 @@ class BorrowerControllerIT extends AbstractIntegrationTest {
     static final String LO = UUID.randomUUID().toString();
 
     private RequestPostProcessor lo() {
-        return jwt().jwt(j -> j.subject(LO)).authorities(new SimpleGrantedAuthority("ROLE_LO"));
+        return jwt().jwt(j -> j.subject(LO).claim("org_id", DEFAULT_ORG))
+                   .authorities(new SimpleGrantedAuthority("ROLE_LO"));
     }
 
     private String createLoan() throws Exception {
@@ -76,7 +77,8 @@ class BorrowerControllerIT extends AbstractIntegrationTest {
     void cannotAddBorrowerToSomeoneElsesLoan403() throws Exception {
         String loanId = createLoan();   // owned by LO
         mvc.perform(post("/api/loans/{id}/borrowers", loanId)
-                        .with(jwt().jwt(j -> j.subject(UUID.randomUUID().toString()))
+                        .with(jwt().jwt(j -> j.subject(UUID.randomUUID().toString())
+                                              .claim("org_id", DEFAULT_ORG))
                                 .authorities(new SimpleGrantedAuthority("ROLE_LO")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"firstName\":\"X\",\"lastName\":\"Y\",\"primary\":false}"))

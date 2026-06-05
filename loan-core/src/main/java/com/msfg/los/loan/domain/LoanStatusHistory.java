@@ -1,6 +1,6 @@
 package com.msfg.los.loan.domain;
 
-import com.msfg.los.platform.domain.AuditableEntity;
+import com.msfg.los.platform.domain.TenantScopedEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -10,7 +10,7 @@ import java.util.UUID;
 @Table(name = "loan_status_history")
 @Getter
 @Setter
-public class LoanStatusHistory extends AuditableEntity {
+public class LoanStatusHistory extends TenantScopedEntity {
 
     @Column(nullable = false)
     private UUID loanId;

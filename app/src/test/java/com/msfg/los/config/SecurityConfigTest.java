@@ -28,20 +28,26 @@ class SecurityConfigTest extends AbstractIntegrationTest {
 
     @Test
     void authenticatedPassesSecurity() throws Exception {
-        mvc.perform(get("/api/loans").with(jwt().authorities(new SimpleGrantedAuthority("ROLE_LO"))))
+        mvc.perform(get("/api/loans")
+                .with(jwt().jwt(j -> j.claim("org_id", DEFAULT_ORG))
+                           .authorities(new SimpleGrantedAuthority("ROLE_LO"))))
             .andExpect(status().isOk());
     }
 
     @Test
     void wrongRoleCannotCreate_403() throws Exception {
-        mvc.perform(post("/api/loans").with(jwt().authorities(new SimpleGrantedAuthority("ROLE_PROCESSOR"))))
+        mvc.perform(post("/api/loans")
+                .with(jwt().jwt(j -> j.claim("org_id", DEFAULT_ORG))
+                           .authorities(new SimpleGrantedAuthority("ROLE_PROCESSOR"))))
             .andExpect(status().isForbidden());
     }
 
     @Test
     void loRolePassesCreateAuthz_400WithoutBody() throws Exception {
         // Send an empty JSON object so Spring can parse the body; @NotNull constraints fire → 400
-        mvc.perform(post("/api/loans").with(jwt().authorities(new SimpleGrantedAuthority("ROLE_LO")))
+        mvc.perform(post("/api/loans")
+                .with(jwt().jwt(j -> j.claim("org_id", DEFAULT_ORG))
+                           .authorities(new SimpleGrantedAuthority("ROLE_LO")))
                 .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
                 .content("{}"))
             .andExpect(status().isBadRequest());
