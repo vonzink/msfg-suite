@@ -17,9 +17,12 @@ public class TenantRlsAspect {
     public Object setCurrentOrg(ProceedingJoinPoint pjp) throws Throwable {
         UUID org = TenantContextHolder.get();
         if (org != null) {
+            // Sets the transaction-local GUC the RLS policy reads. getResultList() (ignored) over
+            // getSingleResult() — set_config always returns one row, but this avoids any
+            // NoResultException risk on a path that runs for every transaction.
             em.createNativeQuery("select set_config('app.current_org', :org, true)")
               .setParameter("org", org.toString())
-              .getSingleResult();   // transaction-local GUC; the RLS policy reads it
+              .getResultList();
         }
         return pjp.proceed();
     }
