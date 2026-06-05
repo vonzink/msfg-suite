@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -45,8 +46,9 @@ public class IncomeSummaryService {
         Map<UUID, String> borrowerNames = borrowers.findByLoanIdOrderByOrdinalAsc(loanId).stream()
                 .collect(Collectors.toMap(BorrowerParty::getId, IncomeSummaryService::fullName));
 
-        Map<UUID, String> employerNames = employments.findByLoanIdOrderByOrdinalAsc(loanId).stream()
-                .collect(Collectors.toMap(Employment::getId, e ->
+        Map<UUID, String> employerNames = new HashMap<>();
+        employments.findByLoanIdOrderByOrdinalAsc(loanId).forEach(e ->
+                employerNames.put(e.getId(),
                         e.getEmployerName() != null ? e.getEmployerName()
                                 : (Boolean.TRUE.equals(e.getSelfEmployed()) ? "Self-Employed" : null)));
 

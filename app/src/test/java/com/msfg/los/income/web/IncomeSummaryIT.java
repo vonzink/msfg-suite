@@ -140,6 +140,44 @@ class IncomeSummaryIT extends AbstractIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
+    // --- NPE regression: employment with null employerName (W-2 in-flight, no name entered yet) ---
+    // The service guard rejects null-name W-2 via API, so we simulate the in-flight state
+    // (e.g. migrated data) by inserting directly into the DB, then confirm summary returns 200.
+
+    @Test
+    void summaryHandlesEmploymentWithNoEmployerName() throws Exception {
+        String loanId = createLoan();
+        String borrowerId = addBorrower(loanId, "Jane", "Doe", true);
+
+        // Insert employment directly — null employerName, selfEmployed=false (W-2 in-flight state).
+        // Bypasses the API guard ("employerName required unless selfEmployed=true") to simulate
+        // migrated/partial data that triggers the Collectors.toMap NPE in the old code.
+        String empId = UUID.randomUUID().toString();
+        jdbc.update(
+                "INSERT INTO employment (id, org_id, loan_id, borrower_id, employer_name, self_employed, employment_status, ordinal) " +
+                "VALUES (?::uuid, ?::uuid, ?::uuid, ?::uuid, NULL, false, 'CURRENT', 1)",
+                empId, DEFAULT_ORG, loanId, borrowerId);
+
+        addIncome(loanId, borrowerId, "BASE", 4000, empId);
+
+        MvcResult result = mvc.perform(get("/api/loans/{loanId}/income/summary", loanId).with(lo()))
+                .andExpect(status().isOk())                                     // was 500 before fix
+                .andExpect(jsonPath("$.data.rows.length()").value(1))
+                .andReturn();
+
+        String body = result.getResponse().getContentAsString();
+
+        // employerName must be null (not "Self-Employed", not a string)
+        List<Object> employerNames = JsonPath.read(body,
+                "$.data.rows[?(@.incomeType=='BASE')].employerName");
+        assertThat(employerNames).hasSize(1);
+        assertThat(employerNames.get(0)).isNull();
+
+        // total == 4000
+        Number totalRaw = JsonPath.read(body, "$.data.totalMonthlyIncome");
+        assertThat(new BigDecimal(totalRaw.toString()).compareTo(new BigDecimal("4000"))).isEqualTo(0);
+    }
+
     // --- no token 401 ---
 
     @Test
