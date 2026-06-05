@@ -48,7 +48,7 @@ create table pii_access_log (
     subject_type varchar(40) not null,
     subject_id uuid not null,
     field varchar(40) not null,
-    reason varchar(500),
+    reason varchar(500) not null,
     created_at timestamp(6) with time zone, created_by varchar(120),
     updated_at timestamp(6) with time zone, updated_by varchar(120)
 );

@@ -13,15 +13,16 @@ import java.util.UUID;
 @Setter
 public class PiiAccessLog extends TenantScopedEntity {
 
-    @Column(nullable = false)
+    @Column(nullable = false, length = 40)
     private String subjectType;
 
     @Column(nullable = false)
     private UUID subjectId;
 
-    @Column(nullable = false)
+    @Column(nullable = false, length = 40)
     private String field;
 
-    @Column(length = 500)
+    // Required: every NPI access must state a justification (audit/compliance).
+    @Column(nullable = false, length = 500)
     private String reason;
 }
