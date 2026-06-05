@@ -20,11 +20,13 @@ class LoanControllerIT extends AbstractIntegrationTest {
     static final String LO = UUID.randomUUID().toString();
 
     private RequestPostProcessor lo() {
-        return jwt().jwt(j -> j.subject(LO)).authorities(new SimpleGrantedAuthority("ROLE_LO"));
+        return jwt().jwt(j -> j.subject(LO).claim("org_id", DEFAULT_ORG))
+                   .authorities(new SimpleGrantedAuthority("ROLE_LO"));
     }
 
     private RequestPostProcessor user(String sub, String role) {
-        return jwt().jwt(j -> j.subject(sub)).authorities(new SimpleGrantedAuthority(role));
+        return jwt().jwt(j -> j.subject(sub).claim("org_id", DEFAULT_ORG))
+                   .authorities(new SimpleGrantedAuthority(role));
     }
 
     private String createLoan() throws Exception {

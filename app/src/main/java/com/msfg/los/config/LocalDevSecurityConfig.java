@@ -1,5 +1,6 @@
 package com.msfg.los.config;
 
+import com.msfg.los.platform.tenancy.TenantContextFilter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -34,6 +35,14 @@ public class LocalDevSecurityConfig {
     private static final Logger log = LoggerFactory.getLogger(LocalDevSecurityConfig.class);
     /** Stable dev principal id — use this as loanOfficerId when creating loans locally. */
     public static final String DEV_USER_ID = "00000000-0000-0000-0000-000000000001";
+    /** Default org (MSFG seed) — set on dev JWT so TenantContextFilter stamps reads/writes. */
+    public static final String DEV_ORG_ID = "00000000-0000-0000-0000-0000000000aa";
+
+    private final TenantContextFilter tenantContextFilter;
+
+    public LocalDevSecurityConfig(TenantContextFilter tenantContextFilter) {
+        this.tenantContextFilter = tenantContextFilter;
+    }
 
     @Bean
     SecurityFilterChain localFilterChain(HttpSecurity http) throws Exception {
@@ -44,7 +53,8 @@ public class LocalDevSecurityConfig {
             // AFTER SecurityContextHolderFilter: that filter loads (and later clears) the context,
             // so we must set our dev principal into the already-established context, not before it
             // (running before it gets clobbered when it loads a fresh empty context).
-            .addFilterAfter(new DevPrincipalFilter(), SecurityContextHolderFilter.class);
+            .addFilterAfter(new DevPrincipalFilter(), SecurityContextHolderFilter.class)
+            .addFilterAfter(tenantContextFilter, DevPrincipalFilter.class);
         return http.build();
     }
 
@@ -57,10 +67,13 @@ public class LocalDevSecurityConfig {
                 .header("alg", "none")
                 .subject(DEV_USER_ID)
                 .claim("cognito:groups", List.of("ADMIN"))
+                .claim("org_id", DEV_ORG_ID)
                 .issuedAt(Instant.now())
                 .expiresAt(Instant.now().plusSeconds(3600))
                 .build();
-            var auth = new JwtAuthenticationToken(jwt, List.of(new SimpleGrantedAuthority("ROLE_ADMIN")));
+            var auth = new JwtAuthenticationToken(jwt,
+                List.of(new SimpleGrantedAuthority("ROLE_PLATFORM_ADMIN"),
+                        new SimpleGrantedAuthority("ROLE_ADMIN")));
             SecurityContextHolder.getContext().setAuthentication(auth);
             chain.doFilter(req, res);
         }
