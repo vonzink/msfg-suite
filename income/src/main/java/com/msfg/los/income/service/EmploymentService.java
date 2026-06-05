@@ -121,7 +121,10 @@ public class EmploymentService {
         if (positionTitle != null) e.setPositionTitle(positionTitle);
         if (employmentStatus != null) e.setEmploymentStatus(employmentStatus);
         if (classification != null) e.setClassification(classification);
-        if (selfEmployed != null) e.setSelfEmployed(selfEmployed);
+        if (selfEmployed != null) {
+            e.setSelfEmployed(selfEmployed);
+            if (!selfEmployed) e.setOwnershipShare(null);   // clear paired field so SE→W2 switch is recoverable
+        }
         if (ownershipShare != null) e.setOwnershipShare(ownershipShare);
         if (employedByPartyToTransaction != null) e.setEmployedByPartyToTransaction(employedByPartyToTransaction);
         if (startDate != null) e.setStartDate(startDate);

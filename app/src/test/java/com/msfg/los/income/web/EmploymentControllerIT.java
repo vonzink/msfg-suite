@@ -13,6 +13,7 @@ import java.util.UUID;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.hamcrest.Matchers.containsString;
 
 class EmploymentControllerIT extends AbstractIntegrationTest {
 
@@ -75,7 +76,8 @@ class EmploymentControllerIT extends AbstractIntegrationTest {
         mvc.perform(post("/api/loans/{l}/borrowers/{b}/employments", loanId, borrowerId).with(lo())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"selfEmployed\":true}"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("ownershipShare")));
     }
 
     @Test
@@ -181,5 +183,34 @@ class EmploymentControllerIT extends AbstractIntegrationTest {
                                  "\"startDate\":\"2015-06-01\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.selfEmployed").value(true));
+    }
+
+    @Test
+    void secondEmploymentGetsOrdinalOne() throws Exception {
+        String loanId = createLoan();
+        String borrowerId = addBorrower(loanId);
+        addEmployment(loanId, borrowerId,
+                "{\"employerName\":\"First Co\",\"employmentStatus\":\"CURRENT\",\"startDate\":\"2018-01-01\"}");
+        addEmployment(loanId, borrowerId,
+                "{\"employerName\":\"Second Co\",\"employmentStatus\":\"CURRENT\",\"startDate\":\"2022-01-01\"}");
+        mvc.perform(get("/api/loans/{l}/borrowers/{b}/employments", loanId, borrowerId).with(lo()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[1].ordinal").value(1));
+    }
+
+    @Test
+    void selfEmployedCanSwitchToW2OnPatch() throws Exception {
+        String loanId = createLoan();
+        String borrowerId = addBorrower(loanId);
+        String empId = addEmployment(loanId, borrowerId,
+                "{\"selfEmployed\":true,\"ownershipShare\":\"GREATER_OR_EQUAL_25\",\"startDate\":\"2015-06-01\"}");
+        // PATCH selfEmployed=false — ownershipShare must be cleared so validation passes
+        mvc.perform(patch("/api/loans/{l}/borrowers/{b}/employments/{e}", loanId, borrowerId, empId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"selfEmployed\":false,\"employerName\":\"W2 Co\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.selfEmployed").value(false))
+                .andExpect(jsonPath("$.data.ownershipShare").doesNotExist());
     }
 }
