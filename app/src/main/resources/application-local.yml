@@ -7,6 +7,9 @@ spring:
 # ADMIN principal), so the app boots and is testable without a reachable Cognito issuer.
 # dev/prod set spring.security.oauth2.resourceserver.jwt.issuer-uri to the real Cognito pool.
 los:
+  cors:
+    # Local dev: accept requests from Vite (5173) and Next.js (3000) dev servers.
+    allowed-origins: "http://localhost:5173,http://localhost:3000"
   npi:
     # Local-dev key only (not real NPI). dev/prod must supply LOS_NPI_KEY from the environment.
     key: ${LOS_NPI_KEY:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}

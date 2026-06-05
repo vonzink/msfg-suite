@@ -8,3 +8,8 @@ spring:
       resourceserver:
         jwt:
           issuer-uri: ${COGNITO_ISSUER}
+los:
+  cors:
+    # Set the real frontend origin(s) for the dev environment here, or via LOS_CORS_ALLOWED_ORIGINS env var.
+    # Example: los.cors.allowed-origins: https://dev.app.msfgco.com
+    # allowed-origins: https://dev.app.msfgco.com
