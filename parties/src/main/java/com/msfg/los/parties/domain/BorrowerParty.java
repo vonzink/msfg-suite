@@ -9,6 +9,9 @@ import lombok.Setter;
 import java.time.LocalDate;
 import java.util.UUID;
 
+// SECURITY: this entity holds decrypted NPI (`ssn`) in memory for the request lifetime.
+// Do NOT add @ToString/@Data, do NOT log this entity, and never serialize it directly — expose it
+// only through BorrowerResponse (masked) or the audited reveal-ssn path. See BorrowerService.
 @Entity
 @Table(name = "borrower_party")
 @Getter
