@@ -1,18 +1,22 @@
--- Harden the RLS policies to handle the case where app.current_org is reset to its default
--- empty string (rather than NULL). PostgreSQL's RESET on a custom GUC that has been set at
--- least once in a session sets it to "" (empty default), not NULL. current_setting(name, true)
--- then returns "" rather than NULL, and ""::uuid throws an error instead of evaluating to NULL.
--- NULLIF(expr, '') returns NULL when expr is "" — so the comparison becomes NULL::uuid → NULL
--- → org_id = NULL → NULL (not true) → RLS denies the row. Fail-closed via false, not error.
+-- Harden the RLS policies:
+--  (1) handle app.current_org reset to the empty-string default. After RESET, a custom GUC that
+--      was set at least once returns '' (not NULL); ''::uuid throws. NULLIF(expr,'') -> NULL, so
+--      the predicate becomes NULL (not true) -> RLS denies the row. Fail-closed via false, not error.
+--  (2) make write-side enforcement explicit with WITH CHECK (same predicate), so INSERT/UPDATE are
+--      visibly constrained to the current org (Postgres would derive this from USING for a FOR ALL
+--      policy, but explicit is the standard hardening for security policies).
 
 drop policy if exists tenant_isolation on loan;
 create policy tenant_isolation on loan
-    using (org_id = nullif(current_setting('app.current_org', true), '')::uuid);
+    using (org_id = nullif(current_setting('app.current_org', true), '')::uuid)
+    with check (org_id = nullif(current_setting('app.current_org', true), '')::uuid);
 
 drop policy if exists tenant_isolation on borrower_party;
 create policy tenant_isolation on borrower_party
-    using (org_id = nullif(current_setting('app.current_org', true), '')::uuid);
+    using (org_id = nullif(current_setting('app.current_org', true), '')::uuid)
+    with check (org_id = nullif(current_setting('app.current_org', true), '')::uuid);
 
 drop policy if exists tenant_isolation on loan_status_history;
 create policy tenant_isolation on loan_status_history
-    using (org_id = nullif(current_setting('app.current_org', true), '')::uuid);
+    using (org_id = nullif(current_setting('app.current_org', true), '')::uuid)
+    with check (org_id = nullif(current_setting('app.current_org', true), '')::uuid);

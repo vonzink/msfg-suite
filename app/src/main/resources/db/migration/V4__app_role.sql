@@ -1,15 +1,20 @@
--- Create a non-superuser application role that is subject to Row Level Security.
--- PostgreSQL superusers (including the Testcontainers 'postgres' account) always bypass RLS,
--- even with FORCE ROW LEVEL SECURITY — that FORCE only overrides the table-owner's implicit
--- bypass, not the superuser bypass. Production app connections must run as 'app_user' (or
--- equivalent) so RLS actually enforces tenant isolation at the DB layer.
--- RlsIT uses SET ROLE app_user to prove the policy works for a real non-superuser.
+-- Non-superuser application role that is SUBJECT to Row Level Security (used to prove + later
+-- enforce DB-layer tenant isolation). PostgreSQL superusers AND table owners bypass RLS — FORCE
+-- only overrides the owner's implicit bypass, not the superuser's — so RLS only actually enforces
+-- for a non-owner, non-superuser role like this one.
+--
+-- Created NOLOGIN + passwordless on purpose: it is used via `SET ROLE app_user` (needs no
+-- password) by RlsIT, and as the grant target. It ships NO usable credential to any environment.
+--
+-- DEPLOYMENT REQUIREMENT (to engage RLS for the *running app*): point the app's runtime datasource
+-- at a non-owner role while Flyway/DDL runs as the owner — e.g. provision out-of-band per env
+-- `ALTER ROLE app_user LOGIN PASSWORD '<from-secrets>'; GRANT CONNECT ON DATABASE <db> TO app_user;`
+-- Until that is done, tenant isolation at runtime is enforced by the app layer
+-- (Hibernate @TenantId + findByIdAndOrgId); RLS is a proven-but-dormant DB-layer backstop.
 do $$ begin
   if not exists (select 1 from pg_roles where rolname = 'app_user') then
-    create role app_user login password 'app_password' noinherit nosuperuser nocreatedb nocreaterole;
+    create role app_user nosuperuser nocreatedb nocreaterole noinherit;
   end if;
-  -- Grant connect on current database (avoids hard-coding the db name which varies in TC).
-  execute 'grant connect on database ' || current_database() || ' to app_user';
 end $$;
 
 grant usage on schema public to app_user;
