@@ -67,4 +67,7 @@ create policy tenant_isolation on pii_access_log
     using (org_id = nullif(current_setting('app.current_org', true), '')::uuid)
     with check (org_id = nullif(current_setting('app.current_org', true), '')::uuid);
 
-grant select, insert, update, delete on borrower_address, pii_access_log to app_user;
+grant select, insert, update, delete on borrower_address to app_user;
+-- pii_access_log is an append-only audit: grant SELECT/INSERT only (no update/delete) so the
+-- runtime role cannot alter or erase NPI-access records.
+grant select, insert on pii_access_log to app_user;
