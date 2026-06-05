@@ -10,6 +10,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -102,6 +103,32 @@ class IncomeVerificationIT extends AbstractIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
+    // --- cross-loan borrower → 400 ---
+
+    @Test
+    void orderWithForeignBorrowerReturns400() throws Exception {
+        // L1 + B1
+        String l1 = createLoan();
+        String b1 = addBorrower(l1);
+
+        // L2 + B2 (different loan, same org)
+        String l2 = createLoan();
+        String b2 = addBorrower(l2);
+
+        // POST to L1 with B2's id → borrower does not belong to L1 → 400
+        mvc.perform(post("/api/loans/{loanId}/income/verifications", l1).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"verificationType\":\"VOI\",\"borrowerId\":\"%s\"}".formatted(b2)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", containsString("borrowerId")));
+
+        // Sanity: same-loan borrower is still accepted → 201
+        mvc.perform(post("/api/loans/{loanId}/income/verifications", l1).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"verificationType\":\"VOI\",\"borrowerId\":\"%s\"}".formatted(b1)))
+                .andExpect(status().isCreated());
+    }
+
     // --- no token → 401 ---
 
     @Test
@@ -110,5 +137,15 @@ class IncomeVerificationIT extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"verificationType\":\"VOI\"}"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    // --- helpers ---
+
+    private String addBorrower(String loanId) throws Exception {
+        var res = mvc.perform(post("/api/loans/{id}/borrowers", loanId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"primary\":true}"))
+                .andExpect(status().isCreated()).andReturn();
+        return com.jayway.jsonpath.JsonPath.read(res.getResponse().getContentAsString(), "$.data.id");
     }
 }
