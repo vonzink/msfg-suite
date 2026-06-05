@@ -5,6 +5,8 @@ import com.msfg.los.loan.id.SequenceLoanNumberGenerator;
 import com.msfg.los.loan.repo.*;
 import com.msfg.los.loan.web.dto.*;
 import com.msfg.los.platform.error.NotFoundException;
+import com.msfg.los.platform.tenancy.OrgTenantResolver;
+import com.msfg.los.platform.tenancy.TenantContextHolder;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -45,7 +47,14 @@ public class LoanService {
 
     @Transactional(readOnly = true)
     public Loan get(UUID id) {
-        return loans.findById(id).orElseThrow(() -> new NotFoundException("Loan", id));
+        // Use findByIdAndOrgId (not findById) so Hibernate generates WHERE id=? AND org_id=?.
+        // EntityManager.find() by PK does not apply the @TenantId filter in Hibernate 6 — it
+        // only filters JPQL/Criteria. Without the org_id predicate, a cross-tenant caller could
+        // load another org's loan and then hit 403 instead of 404 (leaking existence).
+        UUID org = TenantContextHolder.get();
+        UUID effectiveOrg = org != null ? org : OrgTenantResolver.NIL;
+        return loans.findByIdAndOrgId(id, effectiveOrg)
+                    .orElseThrow(() -> new NotFoundException("Loan", id));
     }
 
     @Transactional(readOnly = true)
