@@ -87,7 +87,7 @@ public class LoanCalculationService {
 
         // ── 5. LTV / CLTV / TLTV — percentRatio returns null if basis null/zero
         BigDecimal ltv  = percentRatio(base, ltvBasis);
-        BigDecimal cltv = percentRatio(nz(base).add(nz(second)), ltvBasis);
+        BigDecimal cltv = (base == null) ? null : percentRatio(base.add(nz(second)), ltvBasis);
         // Per spec: tltv = cltv (no separate HELOC-line field yet)
         BigDecimal tltv = cltv;
 

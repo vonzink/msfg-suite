@@ -442,4 +442,34 @@ class LoanCalculationIT extends AbstractIntegrationTest {
         mvc.perform(get("/api/loans/{id}/calculations", UUID.randomUUID()))
                 .andExpect(status().isUnauthorized());
     }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Edge case 9: null baseLoanAmount → ltv, cltv, tltv ALL null
+    //   secondLoanAmount present; salesPrice + appraisedValue present (ltvBasis non-null).
+    //   Bug: old code coerced null base to 0 via nz(base), yielding cltv = 8.000 instead of null.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    @Test
+    void nullBaseLoanAmountYieldsNullLtvFamily() throws Exception {
+        String loanId = createLoan("PURCHASE");
+        // secondLoanAmount present, value basis present, but NO baseLoanAmount
+        patchLoan(loanId, """
+                {
+                  "secondLoanAmount": 30000,
+                  "salesPrice": 375000,
+                  "appraisedValue": 375000
+                }
+                """);
+
+        mvc.perform(get("/api/loans/{id}/calculations", loanId).with(lo()))
+                .andExpect(status().isOk())
+                // totalLoanAmount null (base is null)
+                .andExpect(jsonPath("$.data.totalLoanAmount").value(nullValue()))
+                // ltv null (base null → percentRatio returns null)
+                .andExpect(jsonPath("$.data.ltv").value(nullValue()))
+                // cltv null — guard: base==null → null (was WRONG: returned 8.000)
+                .andExpect(jsonPath("$.data.cltv").value(nullValue()))
+                // tltv null (assigned from cltv)
+                .andExpect(jsonPath("$.data.tltv").value(nullValue()));
+    }
 }
