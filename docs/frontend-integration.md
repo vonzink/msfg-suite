@@ -40,7 +40,7 @@ Success:
 ```
 Paged list:
 ```json
-{ "success": true, "data": { "items": [...], "page": 0, "size": 20, "totalElements": 123, "totalPages": 7 } }
+{ "success": true, "data": { "items": [...], "page": 0, "size": 20, "total": 123, "totalPages": 7 } }
 ```
 Error (any 4xx/5xx — FLAT, not nested):
 ```json
@@ -91,11 +91,26 @@ Exact schemas: see `/v3/api-docs`.
   - `GET /api/loans/{loanId}/income/summary` — the income grid: rows (borrower · type · employer · monthly) +
     `totalMonthlyIncome`.
   - `POST|GET /api/loans/{loanId}/income/verifications` — doc-less VOI/tax-transcript tracker (stub today).
+- **Assets & Liabilities** (1003 §2)
+  - `POST|GET|PATCH|DELETE /api/loans/{loanId}/borrowers/{borrowerId}/assets[/{assetId}]` + `GET /api/loans/{loanId}/assets/summary` (`totalAssets`).
+  - `POST|GET|PATCH|DELETE /api/loans/{loanId}/borrowers/{borrowerId}/liabilities[/{liabilityId}]` — each carries `includeInDti` + `exclusionReason` (DTI include/exclude toggle) — + `GET /api/loans/{loanId}/liabilities/summary` (`totalMonthlyPayments`, `dtiMonthlyPayments`, `totalUnpaidBalance`).
+  - `POST|GET /api/loans/{loanId}/assets/verifications` — doc-less VOA tracker (stub).
+- **Real Estate Owned** (1003 §3)
+  - `POST|GET|PATCH|DELETE /api/loans/{loanId}/reo[/{reoId}]` (loan-scoped) + `GET /api/loans/{loanId}/reo/summary` (value/rental/expense/mortgage totals).
+- **Loan Information** (1003 §4)
+  - Carried on `GET|PATCH /api/loans/{id}`: the §4 fields (rate/term; base/financed/second loan amounts; sales price; appraised value; down payment; qualifying score; documentation type) + the embedded subject property (property type/occupancy/units/values).
+- **Qualification calc** (read-only, computed live — 1003 underwriting math)
+  - `GET /api/loans/{loanId}/calculations` → LTV/CLTV/TLTV, monthly P&I, proposed housing PITI, net rental, **DTI front/back** + the inputs used. **Any figure may be `null`** when its inputs are missing — never a 500. (Spec 6B.)
+- **Declarations & HMDA** (1003 §5 + §8) — 1:1 per borrower, **PUT-upsert** (not collection CRUD)
+  - `GET|PUT /api/loans/{loanId}/borrowers/{borrowerId}/declarations` (the §5 yes/no questions + `bankruptcyTypes` set).
+  - `GET|PUT /api/loans/{loanId}/borrowers/{borrowerId}/demographics` (`ethnicity`/`race` multi-select, `sex`, `applicationTakenMethod`). **GET before any PUT → 200 with empty/null fields** (not 404).
 - **Admin** (platform)
   - `/api/admin/**` — org/tenant provisioning etc. (`PLATFORM_ADMIN` only).
 
-*(Coming next, additive: Assets & Liabilities, REO + Loan Info + LTV/DTI calc, Declarations/HMDA, then
-conditions/pricing/AUS/disclosures. Watch `/v3/api-docs` and `docs/ROADMAP.md`.)*
+**✅ The full 1003 (URLA) is merged and live** — every screen in your build plan is buildable now (Specs 1–7).
+*Coming later (additive, not yet built): conditions/document-manager → products & pricing/lock → AUS → disclosures;
+plus small deferred bits — Details-of-Transaction/cash-to-close (Spec 6C), down-payment-source checkboxes,
+multi-lien/joint REO. Watch `/v3/api-docs` + `docs/ROADMAP.md`.*
 
 ## Design inputs (use these)
 The UI is modeled on **UWM EASE**. Rich design material already lives in this repo:
