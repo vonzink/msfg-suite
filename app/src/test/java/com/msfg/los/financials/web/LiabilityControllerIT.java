@@ -103,12 +103,23 @@ class LiabilityControllerIT extends AbstractIntegrationTest {
         String loanId = createLoan();
         String borrowerId = addBorrower(loanId);
 
+        String liabilityId = addLiability(loanId, borrowerId,
+                "{\"liabilityType\":\"REVOLVING\",\"includeInDti\":true,\"exclusionReason\":\"OTHER\"}");
+
+        // verify response reflects cleared reason
         mvc.perform(post("/api/loans/{l}/borrowers/{b}/liabilities", loanId, borrowerId).with(lo())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"liabilityType\":\"REVOLVING\",\"includeInDti\":true,\"exclusionReason\":\"OTHER\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.includeInDti").value(true))
                 .andExpect(jsonPath("$.data.exclusionReason").doesNotExist());
+
+        // verify PERSISTED state: first liability in list (ordinal 0) is the one we created
+        mvc.perform(get("/api/loans/{l}/borrowers/{b}/liabilities", loanId, borrowerId).with(lo()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].id").value(liabilityId))
+                .andExpect(jsonPath("$.data[0].includeInDti").value(true))
+                .andExpect(jsonPath("$.data[0].exclusionReason").doesNotExist());
     }
 
     // --- PATCH excluded→included recovers (exclusionReason cleared) ---
@@ -129,6 +140,13 @@ class LiabilityControllerIT extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.includeInDti").value(true))
                 .andExpect(jsonPath("$.data.exclusionReason").doesNotExist());
+
+        // verify PERSISTED state: only liability in loan (ordinal 0)
+        mvc.perform(get("/api/loans/{l}/borrowers/{b}/liabilities", loanId, borrowerId).with(lo()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].id").value(liabilityId))
+                .andExpect(jsonPath("$.data[0].includeInDti").value(true))
+                .andExpect(jsonPath("$.data[0].exclusionReason").doesNotExist());
     }
 
     // --- negative monthlyPayment → 400, $.message ~ "monthlyPayment" ---

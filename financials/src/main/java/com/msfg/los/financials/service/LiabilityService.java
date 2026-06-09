@@ -48,7 +48,7 @@ public class LiabilityService {
     }
 
     /**
-     * Validate the EFFECTIVE (merged) DTI pairing state and apply it to the entity.
+     * Apply and validate the EFFECTIVE (merged) DTI pairing state on the entity.
      * Called after null-skip field merges so the entity already holds the effective values.
      *
      * Pairing rules:
@@ -60,7 +60,7 @@ public class LiabilityService {
      *   unpaidBalance   < 0 → 400
      *   monthsRemaining < 0 → 400
      */
-    private void validateDtiPairing(Liability l) {
+    private void applyAndValidateDtiPairing(Liability l) {
         if (!l.isIncludeInDti() && l.getExclusionReason() == null) {
             throw new ValidationException("exclusionReason is required when a liability is excluded from DTI");
         }
@@ -95,18 +95,12 @@ public class LiabilityService {
         if (req.monthlyPayment() != null) l.setMonthlyPayment(req.monthlyPayment());
         // entity default: includeInDti = true; override only if explicitly set
         if (req.includeInDti() != null) l.setIncludeInDti(req.includeInDti());
-        // apply explicit includeInDti=true clears exclusionReason before it is set
-        if (l.isIncludeInDti() && req.exclusionReason() != null) {
-            // will be cleared by validateDtiPairing; set it so validate sees it and clears
-            l.setExclusionReason(req.exclusionReason());
-        } else if (req.exclusionReason() != null) {
-            l.setExclusionReason(req.exclusionReason());
-        }
+        if (req.exclusionReason() != null) l.setExclusionReason(req.exclusionReason());
         if (req.monthsRemaining() != null) l.setMonthsRemaining(req.monthsRemaining());
         l.setOrdinal((int) liabilities.countByBorrowerId(borrowerId));
 
         validateValues(l);
-        validateDtiPairing(l);
+        applyAndValidateDtiPairing(l);
 
         return liabilities.save(l);
     }
@@ -132,18 +126,11 @@ public class LiabilityService {
         if (req.monthlyPayment() != null) l.setMonthlyPayment(req.monthlyPayment());
         if (req.monthsRemaining() != null) l.setMonthsRemaining(req.monthsRemaining());
 
-        // DTI paired-field: apply includeInDti first; if it becomes true, clear exclusionReason
-        if (req.includeInDti() != null) {
-            l.setIncludeInDti(req.includeInDti());
-            if (l.isIncludeInDti()) {
-                l.setExclusionReason(null);
-            }
-        }
-        // then apply exclusionReason (after potential clear above)
+        if (req.includeInDti() != null) l.setIncludeInDti(req.includeInDti());
         if (req.exclusionReason() != null) l.setExclusionReason(req.exclusionReason());
 
         validateValues(l);
-        validateDtiPairing(l);
+        applyAndValidateDtiPairing(l);
 
         return l;
     }
