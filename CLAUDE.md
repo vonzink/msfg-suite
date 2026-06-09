@@ -12,7 +12,8 @@ auth / deploy) — NOT the Node/MySQL dashboard at dashboard.msfgco.com.
 - ✅ **Spec 2 — Platform Foundation (multi-tenancy + portability)** — done + merged (`31d190a`), 44 tests.
 - ✅ **Spec 3 — Personal Information & PII** — done + merged (`30361eb`), 56 tests. NPI encryption is LIVE (encrypted/masked SSN + audited reveal).
 - ✅ **Spec 4 — Employment & Income** — done + merged (`0f61957`), 95 tests. New `income` module: Employment + unified `IncomeItem` (ULAD), loan-level income grid + TOTAL, doc-less VOI/tax-transcript verification tracker behind `IncomeVerificationPort` (stub adapter).
-- 🔵 **Spec 5 — Assets & Liabilities** — NEXT (the 1003 continues).
+- ✅ **Spec 5 — Assets & Liabilities** — done + merged (`f3756ef`), 129 tests. New `financials` module: unified `Asset` + `Liability` (ULAD), liability **DTI include/exclude inputs** (flag + reason + monthsRemaining), loan-level summaries (TOTAL ASSETS; all-vs-DTI payment totals), doc-less VOA tracker behind `AssetVerificationPort` (stub).
+- 🔵 **Spec 6 — REO + Loan Information + calc engine** — NEXT (LTV/CLTV/TLTV, **DTI ratio**, housing-expense comparison, details-of-transaction, cash-to-close — consumes the S4/S5 income + DTI inputs). Completes the 1003 core.
 
 ## North-star requirements (design for these from the beginning)
 1. **Multi-tenant** — many companies, small→large; per-tenant data isolation, users, config,

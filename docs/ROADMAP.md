@@ -40,8 +40,8 @@ The data heart. Maps 1:1 to UWM's `Origination`-area controllers. Sits on the mu
 |---|---|---|
 | ✅ **S3** | Personal Information — full borrower PII, addresses, contact, citizenship (NPI encryption LIVE: encrypted/masked SSN + audited reveal). **DONE, merged `30361eb`, 56 tests.** | `Borrower` |
 | ✅ **S4** | Employment & Income — `Employment` + unified `IncomeItem` (ULAD `IncomeType`), loan-level grid + TOTAL, doc-less VOI/tax-transcript tracker behind a stub port. **DONE, merged `0f61957`, 95 tests.** New `income` module. | `Income` |
-| 🔵 **S5** | Assets & Liabilities — entity grids, verification, DTI include/exclude — **NEXT** | `Asset`, `LoanLiabilities` |
-| **S6** | REO + Loan Information + **calc engine** (LTV/CLTV/TLTV, DTI, Housing Expense comparison, Details-of-Transaction ledger, cash-to-close) | `RealEstate`, `LoanInformation`, `Expense`, `DetailsOfTransaction` |
+| ✅ **S5** | Assets & Liabilities — unified `Asset` + `Liability` (ULAD), loan-level summaries (TOTAL ASSETS; all-vs-DTI payment totals), liability **DTI include/exclude inputs** (flag + reason + monthsRemaining), VOA verification stub. **DONE, merged `f3756ef`, 129 tests.** New `financials` module. | `Asset`, `LoanLiabilities` |
+| 🔵 **S6** | REO + Loan Information + **calc engine** (LTV/CLTV/TLTV, DTI ratio, Housing Expense comparison, Details-of-Transaction ledger, cash-to-close — consumes the S4/S5 income + DTI inputs) — **NEXT** | `RealEstate`, `LoanInformation`, `Expense`, `DetailsOfTransaction` |
 | **S7** | Declarations + Government Monitoring (HMDA demographics, per-borrower Q&A) | `Declarations`, `GovernmentMonitoring` |
 
 → **Full 1003 complete.** MISMO 3.4 (iLAD) import/export becomes feasible (`FnmaImport`, 3.4 export).
