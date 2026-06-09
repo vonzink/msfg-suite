@@ -14,7 +14,8 @@ auth / deploy) — NOT the Node/MySQL dashboard at dashboard.msfgco.com.
 - ✅ **Spec 4 — Employment & Income** — done + merged (`0f61957`), 95 tests. New `income` module: Employment + unified `IncomeItem` (ULAD), loan-level income grid + TOTAL, doc-less VOI/tax-transcript verification tracker behind `IncomeVerificationPort` (stub adapter).
 - ✅ **Spec 5 — Assets & Liabilities** — done + merged (`f3756ef`), 129 tests. New `financials` module: unified `Asset` + `Liability` (ULAD), liability **DTI include/exclude inputs** (flag + reason + monthsRemaining), loan-level summaries (TOTAL ASSETS; all-vs-DTI payment totals), doc-less VOA tracker behind `AssetVerificationPort` (stub).
 - ✅ **Spec 6A — Loan Information + REO** — done + merged (`4f11b1d`), 146 tests. Loan §4 fields on `Loan`/`SubjectProperty` + new `reo` module (loan-scoped RealEstateOwned CRUD + summary).
-- 🔵 **Spec 6B — Calc engine** — NEXT (LTV/CLTV/TLTV, **DTI ratio**, housing-expense comparison, details-of-transaction ledger, cash-to-close — consumes the S4/S5/S6A inputs). The novel financial math. Then Spec 7 (Declarations + HMDA) completes the 1003.
+- ✅ **Spec 6B — Calc engine** — done + merged (`65677f1`), 162 tests. New `qualification` module (read-only): `MortgageMath` + `GET /api/loans/{id}/calculations` (LTV/CLTV/TLTV, P&I, proposed housing PITI, net rental, **DTI front/back**). opus re-derived the math. DoT/cash-to-close → 6C.
+- 🔵 **Spec 7 — Declarations + HMDA** — NEXT (URLA §5 per-borrower declarations Q&A + Government Monitoring demographics). Completes the 1003 core.
 
 ## North-star requirements (design for these from the beginning)
 1. **Multi-tenant** — many companies, small→large; per-tenant data isolation, users, config,
