@@ -37,6 +37,22 @@ public class Loan extends TenantScopedEntity {
 
     private BigDecimal noteAmount;
 
+    // §4 Loan Information fields
+    @Enumerated(EnumType.STRING)
+    private DocumentationType documentationType;
+
+    private BigDecimal interestRate;
+    private Integer loanTermMonths;
+    private BigDecimal baseLoanAmount;
+    private BigDecimal financedFeesAmount;
+    private BigDecimal secondLoanAmount;
+    private BigDecimal downPaymentAmount;
+    private Integer qualifyingCreditScore;
+    private BigDecimal proposedTaxesMonthly;
+    private BigDecimal proposedHazardInsuranceMonthly;
+    private BigDecimal proposedHoaDuesMonthly;
+    private BigDecimal proposedMortgageInsuranceMonthly;
+
     @Embedded
     private SubjectProperty subjectProperty = new SubjectProperty();
 }

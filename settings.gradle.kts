@@ -1,2 +1,2 @@
 rootProject.name = "msfg-los"
-include("platform", "app", "loan-core", "parties", "tenancy", "income", "financials")
+include("platform", "app", "loan-core", "parties", "tenancy", "income", "financials", "reo")

@@ -13,4 +13,23 @@ public record UpdateLoanRequest(
     String city,
     String state,
     String postalCode,
-    BigDecimal estimatedValue) {}
+    BigDecimal estimatedValue,
+    // §4 Loan Information fields
+    DocumentationType documentationType,
+    BigDecimal interestRate,
+    Integer loanTermMonths,
+    BigDecimal baseLoanAmount,
+    BigDecimal financedFeesAmount,
+    BigDecimal secondLoanAmount,
+    BigDecimal downPaymentAmount,
+    Integer qualifyingCreditScore,
+    BigDecimal proposedTaxesMonthly,
+    BigDecimal proposedHazardInsuranceMonthly,
+    BigDecimal proposedHoaDuesMonthly,
+    BigDecimal proposedMortgageInsuranceMonthly,
+    // §4 Subject Property fields
+    BigDecimal salesPrice,
+    BigDecimal appraisedValue,
+    PropertyType propertyType,
+    OccupancyType occupancyType,
+    Integer numberOfUnits) {}

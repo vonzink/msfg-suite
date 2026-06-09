@@ -5,6 +5,7 @@ import com.msfg.los.loan.id.SequenceLoanNumberGenerator;
 import com.msfg.los.loan.repo.*;
 import com.msfg.los.loan.web.dto.*;
 import com.msfg.los.platform.error.NotFoundException;
+import com.msfg.los.platform.error.ValidationException;
 import com.msfg.los.platform.tenancy.OrgTenantResolver;
 import com.msfg.los.platform.tenancy.TenantContextHolder;
 import org.springframework.data.domain.Page;
@@ -84,6 +85,58 @@ public class LoanService {
         if (req.state() != null) p.setState(req.state());
         if (req.postalCode() != null) p.setPostalCode(req.postalCode());
         if (req.estimatedValue() != null) p.setEstimatedValue(req.estimatedValue());
+
+        // §4 Loan Information — apply then validate
+        if (req.documentationType() != null) loan.setDocumentationType(req.documentationType());
+        if (req.interestRate() != null) loan.setInterestRate(req.interestRate());
+        if (req.loanTermMonths() != null) loan.setLoanTermMonths(req.loanTermMonths());
+        if (req.baseLoanAmount() != null) loan.setBaseLoanAmount(req.baseLoanAmount());
+        if (req.financedFeesAmount() != null) loan.setFinancedFeesAmount(req.financedFeesAmount());
+        if (req.secondLoanAmount() != null) loan.setSecondLoanAmount(req.secondLoanAmount());
+        if (req.downPaymentAmount() != null) loan.setDownPaymentAmount(req.downPaymentAmount());
+        if (req.qualifyingCreditScore() != null) loan.setQualifyingCreditScore(req.qualifyingCreditScore());
+        if (req.proposedTaxesMonthly() != null) loan.setProposedTaxesMonthly(req.proposedTaxesMonthly());
+        if (req.proposedHazardInsuranceMonthly() != null) loan.setProposedHazardInsuranceMonthly(req.proposedHazardInsuranceMonthly());
+        if (req.proposedHoaDuesMonthly() != null) loan.setProposedHoaDuesMonthly(req.proposedHoaDuesMonthly());
+        if (req.proposedMortgageInsuranceMonthly() != null) loan.setProposedMortgageInsuranceMonthly(req.proposedMortgageInsuranceMonthly());
+
+        // §4 Subject Property
+        if (req.salesPrice() != null) p.setSalesPrice(req.salesPrice());
+        if (req.appraisedValue() != null) p.setAppraisedValue(req.appraisedValue());
+        if (req.propertyType() != null) p.setPropertyType(req.propertyType());
+        if (req.occupancyType() != null) p.setOccupancyType(req.occupancyType());
+        if (req.numberOfUnits() != null) p.setNumberOfUnits(req.numberOfUnits());
+
+        // Validation — each rule its own if/throw
+        if (loan.getInterestRate() != null && (loan.getInterestRate().signum() < 0 || loan.getInterestRate().compareTo(java.math.BigDecimal.valueOf(25)) > 0))
+            throw new ValidationException("interestRate must be between 0 and 25");
+        if (loan.getLoanTermMonths() != null && (loan.getLoanTermMonths() < 1 || loan.getLoanTermMonths() > 480))
+            throw new ValidationException("loanTermMonths must be between 1 and 480");
+        if (loan.getQualifyingCreditScore() != null && (loan.getQualifyingCreditScore() < 300 || loan.getQualifyingCreditScore() > 850))
+            throw new ValidationException("qualifyingCreditScore must be between 300 and 850");
+        if (p.getNumberOfUnits() != null && (p.getNumberOfUnits() < 1 || p.getNumberOfUnits() > 4))
+            throw new ValidationException("numberOfUnits must be between 1 and 4");
+        if (loan.getBaseLoanAmount() != null && loan.getBaseLoanAmount().signum() < 0)
+            throw new ValidationException("baseLoanAmount must be >= 0");
+        if (loan.getFinancedFeesAmount() != null && loan.getFinancedFeesAmount().signum() < 0)
+            throw new ValidationException("financedFeesAmount must be >= 0");
+        if (loan.getSecondLoanAmount() != null && loan.getSecondLoanAmount().signum() < 0)
+            throw new ValidationException("secondLoanAmount must be >= 0");
+        if (loan.getDownPaymentAmount() != null && loan.getDownPaymentAmount().signum() < 0)
+            throw new ValidationException("downPaymentAmount must be >= 0");
+        if (loan.getProposedTaxesMonthly() != null && loan.getProposedTaxesMonthly().signum() < 0)
+            throw new ValidationException("proposedTaxesMonthly must be >= 0");
+        if (loan.getProposedHazardInsuranceMonthly() != null && loan.getProposedHazardInsuranceMonthly().signum() < 0)
+            throw new ValidationException("proposedHazardInsuranceMonthly must be >= 0");
+        if (loan.getProposedHoaDuesMonthly() != null && loan.getProposedHoaDuesMonthly().signum() < 0)
+            throw new ValidationException("proposedHoaDuesMonthly must be >= 0");
+        if (loan.getProposedMortgageInsuranceMonthly() != null && loan.getProposedMortgageInsuranceMonthly().signum() < 0)
+            throw new ValidationException("proposedMortgageInsuranceMonthly must be >= 0");
+        if (p.getSalesPrice() != null && p.getSalesPrice().signum() < 0)
+            throw new ValidationException("salesPrice must be >= 0");
+        if (p.getAppraisedValue() != null && p.getAppraisedValue().signum() < 0)
+            throw new ValidationException("appraisedValue must be >= 0");
+
         return loan;
     }
 
