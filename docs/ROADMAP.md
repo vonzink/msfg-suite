@@ -43,7 +43,7 @@ The data heart. Maps 1:1 to UWM's `Origination`-area controllers. Sits on the mu
 | ✅ **S5** | Assets & Liabilities — unified `Asset` + `Liability` (ULAD), loan-level summaries (TOTAL ASSETS; all-vs-DTI payment totals), liability **DTI include/exclude inputs** (flag + reason + monthsRemaining), VOA verification stub. **DONE, merged `f3756ef`, 129 tests.** New `financials` module. | `Asset`, `LoanLiabilities` |
 | ✅ **S6A** | Loan Information (§4 fields on `Loan`/`SubjectProperty`) + REO (new loan-scoped `reo` module, CRUD + summary). **DONE, merged `4f11b1d`, 146 tests.** | `LoanInformation`, `RealEstate` |
 | ✅ **S6B** | **Calc engine** — read-only `qualification` module: LTV/CLTV/TLTV, P&I, proposed housing PITI, net rental, DTI front/back via `GET /api/loans/{id}/calculations`. **DONE, merged `65677f1`, 162 tests.** (DoT/cash-to-close → 6C.) | `Expense`, `DetailsOfTransaction` |
-| 🔵 **S7** | Declarations + Government Monitoring (HMDA demographics, per-borrower Q&A) — **NEXT, completes the 1003** | `Declarations`, `GovernmentMonitoring` |
+| ✅ **S7** | Declarations + Government Monitoring (HMDA demographics, per-borrower Q&A). **DONE, merged `aa55203`, 175 tests.** New `declarations` module (1:1 PUT-upsert; multi-selects via `EnumSetConverter`). | `Declarations`, `GovernmentMonitoring` |
 
 → **Full 1003 complete.** MISMO 3.4 (iLAD) import/export becomes feasible (`FnmaImport`, 3.4 export).
 

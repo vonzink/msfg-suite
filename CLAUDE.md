@@ -15,7 +15,8 @@ auth / deploy) — NOT the Node/MySQL dashboard at dashboard.msfgco.com.
 - ✅ **Spec 5 — Assets & Liabilities** — done + merged (`f3756ef`), 129 tests. New `financials` module: unified `Asset` + `Liability` (ULAD), liability **DTI include/exclude inputs** (flag + reason + monthsRemaining), loan-level summaries (TOTAL ASSETS; all-vs-DTI payment totals), doc-less VOA tracker behind `AssetVerificationPort` (stub).
 - ✅ **Spec 6A — Loan Information + REO** — done + merged (`4f11b1d`), 146 tests. Loan §4 fields on `Loan`/`SubjectProperty` + new `reo` module (loan-scoped RealEstateOwned CRUD + summary).
 - ✅ **Spec 6B — Calc engine** — done + merged (`65677f1`), 162 tests. New `qualification` module (read-only): `MortgageMath` + `GET /api/loans/{id}/calculations` (LTV/CLTV/TLTV, P&I, proposed housing PITI, net rental, **DTI front/back**). opus re-derived the math. DoT/cash-to-close → 6C.
-- 🔵 **Spec 7 — Declarations + HMDA** — NEXT (URLA §5 per-borrower declarations Q&A + Government Monitoring demographics). Completes the 1003 core.
+- ✅ **Spec 7 — Declarations + HMDA** — done + merged (`aa55203`), 175 tests. New `declarations` module: `BorrowerDeclarations` + `BorrowerDemographics` (1:1 per borrower; multi-selects via `EnumSetConverter`), PUT-upsert.
+- 🎉 **THE FULL 1003 (URLA) IS COMPLETE** — Personal Info · Employment & Income · Assets & Liabilities · Loan Information · REO · qualification calc engine · Declarations · HMDA, all on the multi-tenant spine. 9 modules, 175 tests. **Next milestones (`docs/ROADMAP.md`): Conditions + Document Manager → Pricing/Lock → AUS → Disclosures.**
 
 ## North-star requirements (design for these from the beginning)
 1. **Multi-tenant** — many companies, small→large; per-tenant data isolation, users, config,
