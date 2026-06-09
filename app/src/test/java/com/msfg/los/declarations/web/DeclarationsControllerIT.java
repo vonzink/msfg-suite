@@ -4,12 +4,14 @@ import com.msfg.los.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -18,6 +20,9 @@ class DeclarationsControllerIT extends AbstractIntegrationTest {
 
     @Autowired
     MockMvc mvc;
+
+    @Autowired
+    JdbcTemplate jdbc;
 
     static final String LO = UUID.randomUUID().toString();
 
@@ -104,6 +109,24 @@ class DeclarationsControllerIT extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.occupyAsPrimaryResidence").value(false))
                 .andExpect(jsonPath("$.data.bankruptcyTypes[0]").value("CHAPTER_13"));
+
+        // exactly one row — upsert, not duplicate insert
+        Integer count = jdbc.queryForObject(
+                "select count(*) from borrower_declarations where borrower_id = ?::uuid",
+                Integer.class, borrowerId);
+        assertThat(count).isEqualTo(1);
+    }
+
+    // ── GET before any PUT returns 200 with empty/default body ──────────────
+    @Test
+    void getBeforePutReturnsEmpty() throws Exception {
+        String loanId = createLoan();
+        String borrowerId = addBorrower(loanId);
+
+        mvc.perform(get("/api/loans/{l}/borrowers/{b}/declarations", loanId, borrowerId).with(lo()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.hadOwnershipInterestLast3Years").doesNotExist())
+                .andExpect(jsonPath("$.data.bankruptcyTypes").isEmpty());
     }
 
     // ── Cross-org JWT → 404 ──────────────────────────────────────────────────
