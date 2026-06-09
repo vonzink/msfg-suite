@@ -25,7 +25,7 @@ public class AssetVerification extends TenantScopedEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private VerificationStatus status;
+    private AssetVerificationStatus status;
 
     private String provider;
     private String referenceNumber;

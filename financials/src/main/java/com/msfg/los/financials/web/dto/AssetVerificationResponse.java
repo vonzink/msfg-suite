@@ -2,7 +2,7 @@ package com.msfg.los.financials.web.dto;
 
 import com.msfg.los.financials.domain.AssetVerification;
 import com.msfg.los.financials.domain.AssetVerificationType;
-import com.msfg.los.financials.domain.VerificationStatus;
+import com.msfg.los.financials.domain.AssetVerificationStatus;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -12,7 +12,7 @@ public record AssetVerificationResponse(
         UUID loanId,
         UUID borrowerId,
         AssetVerificationType verificationType,
-        VerificationStatus status,
+        AssetVerificationStatus status,
         String provider,
         String referenceNumber,
         Instant orderedAt,
