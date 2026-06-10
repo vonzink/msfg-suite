@@ -77,8 +77,11 @@ All under `/api`, all tenant- + loan-scoped (the JWT's `org_id` filters everythi
 Exact schemas: see `/v3/api-docs`.
 
 - **Loans / pipeline**
-  - `POST /api/loans` · `GET /api/loans` (paged; filter by status/assignee) · `GET /api/loans/{id}` ·
-    `PATCH /api/loans/{id}` · `POST /api/loans/{id}/status` (guarded lifecycle transition `{targetStatus, reason}`).
+  - `POST /api/loans` — `loanOfficerId` is now **optional**; omit it and it defaults to the authenticated principal.
+  - `GET /api/loans` (paged) — list rows now include `primaryBorrowerName`, `propertyCity`, `propertyState`, `updatedAt` (in addition to `id`, `loanNumber`, `status`, `loanOfficerId`).
+  - `GET /api/loans/{id}` — `LoanSummaryResponse` now also carries `lienPriority`, `amortizationType`, `addressLine1`, `addressLine2`, `postalCode`, `estimatedValue` (so the Loan-Info form pre-fills on reload).
+  - `PATCH /api/loans/{id}` · `POST /api/loans/{id}/status` (guarded lifecycle transition `{targetStatus, reason}`).
+  - `GET /api/loans/{id}/status/transitions` → `{ currentStatus, allowedTransitions: [LoanStatus…] }` — **role-aware** (only the next states the caller may actually perform; use it to drive the status dropdown so it never offers a 403 target).
 - **Borrowers & PII** (1003 §1a)
   - `POST|GET|PATCH|DELETE /api/loans/{loanId}/borrowers[/{borrowerId}]` — SSN is **masked** in responses
     (`ssnLast4`/`ssnMasked`); full SSN only via `POST /api/loans/{loanId}/borrowers/{borrowerId}/reveal-ssn`
