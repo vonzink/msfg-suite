@@ -25,15 +25,17 @@ public class LoanService {
     private final SequenceLoanNumberGenerator numberGen;
     private final LoanLifecycle lifecycle;
     private final CurrentUser currentUser;
+    private final PrimaryBorrowerNameResolver resolver;
 
     public LoanService(LoanRepository loans, LoanStatusHistoryRepository histories,
                        SequenceLoanNumberGenerator numberGen, LoanLifecycle lifecycle,
-                       CurrentUser currentUser) {
+                       CurrentUser currentUser, PrimaryBorrowerNameResolver resolver) {
         this.loans = loans;
         this.histories = histories;
         this.numberGen = numberGen;
         this.lifecycle = lifecycle;
         this.currentUser = currentUser;
+        this.resolver = resolver;
     }
 
     @Transactional
@@ -70,13 +72,18 @@ public class LoanService {
     }
 
     @Transactional(readOnly = true)
-    public Page<Loan> pipeline(UUID loanOfficerId, LoanStatus status, boolean admin, Pageable pageable) {
+    public Page<LoanListItemResponse> pipeline(UUID loanOfficerId, LoanStatus status, boolean admin, Pageable pageable) {
+        Page<Loan> page;
         if (admin) {
-            return status == null ? loans.findAll(pageable) : loans.findByStatus(status, pageable);
+            page = status == null ? loans.findAll(pageable) : loans.findByStatus(status, pageable);
+        } else {
+            page = status == null
+                ? loans.findByLoanOfficerId(loanOfficerId, pageable)
+                : loans.findByLoanOfficerIdAndStatus(loanOfficerId, status, pageable);
         }
-        return status == null
-            ? loans.findByLoanOfficerId(loanOfficerId, pageable)
-            : loans.findByLoanOfficerIdAndStatus(loanOfficerId, status, pageable);
+        var names = resolver.primaryBorrowerNamesByLoanIds(
+            page.map(Loan::getId).getContent());
+        return page.map(l -> LoanListItemResponse.from(l, names.get(l.getId())));
     }
 
     @Transactional
