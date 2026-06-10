@@ -89,6 +89,25 @@ class LoanControllerIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void loanOfficerIdDefaultsToCallerWhenOmitted() throws Exception {
+        mvc.perform(post("/api/loans").with(lo())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"loanPurpose\":\"PURCHASE\"}"))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.data.loanOfficerId").value(LO));
+    }
+
+    @Test
+    void explicitLoanOfficerIdIsUsedWhenProvided() throws Exception {
+        String explicitId = UUID.randomUUID().toString();
+        mvc.perform(post("/api/loans").with(lo())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"loanPurpose\":\"PURCHASE\",\"loanOfficerId\":\"%s\"}".formatted(explicitId)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.data.loanOfficerId").value(explicitId));
+    }
+
+    @Test
     void processorCannotCreate403() throws Exception {
         mvc.perform(post("/api/loans")
                 .with(user(UUID.randomUUID().toString(), "ROLE_PROCESSOR"))
