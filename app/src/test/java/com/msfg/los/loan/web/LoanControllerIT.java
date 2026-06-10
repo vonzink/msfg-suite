@@ -8,6 +8,9 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import java.util.UUID;
+import static org.hamcrest.Matchers.hasItems;
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -114,6 +117,33 @@ class LoanControllerIT extends AbstractIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"loanPurpose\":\"PURCHASE\",\"loanOfficerId\":\"%s\"}".formatted(LO)))
             .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void transitionsForStartedLoanAsLo() throws Exception {
+        String id = createLoan();
+        mvc.perform(get("/api/loans/{id}/status/transitions", id).with(lo()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.currentStatus").value("STARTED"))
+            .andExpect(jsonPath("$.data.allowedTransitions", hasItems("APPLICATION_IN_PROGRESS", "WITHDRAWN", "CANCELLED")))
+            .andExpect(jsonPath("$.data.allowedTransitions", not(hasItem("APPROVED_WITH_CONDITIONS"))));
+    }
+
+    @Test
+    void transitionsRequiresToken() throws Exception {
+        String id = createLoan();
+        mvc.perform(get("/api/loans/{id}/status/transitions", id))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void transitionsCrossOrg404() throws Exception {
+        String id = createLoan();
+        mvc.perform(get("/api/loans/{id}/status/transitions", id)
+                .with(jwt().jwt(j -> j.subject(UUID.randomUUID().toString())
+                                      .claim("org_id", "ffffffff-ffff-ffff-ffff-ffffffffffff"))
+                           .authorities(new SimpleGrantedAuthority("ROLE_LO"))))
+            .andExpect(status().isNotFound());
     }
 
     @Test

@@ -34,6 +34,18 @@ public class LoanLifecycle {
         FUNDED, Role.CLOSER
     );
 
+    public java.util.List<LoanStatus> allowedTransitions(LoanStatus from, java.util.Set<String> authorities) {
+        java.util.List<LoanStatus> out = new java.util.ArrayList<>();
+        FORWARD.getOrDefault(from, java.util.Set.of()).stream()
+            .sorted(java.util.Comparator.comparingInt(Enum::ordinal))
+            .forEach(out::add);
+        if (!from.isTerminal()) { out.add(LoanStatus.WITHDRAWN); out.add(LoanStatus.CANCELLED); }
+        return out.stream().filter(to -> {
+            Role required = ENTRY_ROLE.get(to);
+            return required == null || authorities.contains(required.authority()) || authorities.contains(Role.ADMIN.authority());
+        }).toList();
+    }
+
     public void assertTransition(LoanStatus from, LoanStatus to, Set<String> authorities) {
         if (from == to) throw new ConflictException("Loan already in status " + to);
         boolean legal = FORWARD.getOrDefault(from, Set.of()).contains(to)

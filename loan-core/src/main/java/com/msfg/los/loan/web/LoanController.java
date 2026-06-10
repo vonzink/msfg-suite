@@ -1,6 +1,7 @@
 package com.msfg.los.loan.web;
 
 import com.msfg.los.loan.domain.Loan;
+import com.msfg.los.loan.domain.LoanLifecycle;
 import com.msfg.los.loan.domain.LoanStatus;
 import com.msfg.los.loan.service.LoanAccessGuard;
 import com.msfg.los.loan.service.LoanService;
@@ -23,11 +24,14 @@ public class LoanController {
     private final LoanService service;
     private final LoanAccessGuard accessGuard;
     private final CurrentUser currentUser;
+    private final LoanLifecycle lifecycle;
 
-    public LoanController(LoanService service, LoanAccessGuard accessGuard, CurrentUser currentUser) {
+    public LoanController(LoanService service, LoanAccessGuard accessGuard,
+                          CurrentUser currentUser, LoanLifecycle lifecycle) {
         this.service = service;
         this.accessGuard = accessGuard;
         this.currentUser = currentUser;
+        this.lifecycle = lifecycle;
     }
 
     @PostMapping
@@ -59,6 +63,14 @@ public class LoanController {
     public ApiResponse<LoanSummaryResponse> update(@PathVariable UUID id, @Valid @RequestBody UpdateLoanRequest req) {
         accessGuard.assertCanAccess(service.get(id));
         return ApiResponse.ok(LoanSummaryResponse.from(service.update(id, req)));
+    }
+
+    @GetMapping("/{id}/status/transitions")
+    public ApiResponse<TransitionsResponse> transitions(@PathVariable UUID id) {
+        Loan loan = service.get(id);
+        accessGuard.assertCanAccess(loan);
+        return ApiResponse.ok(new TransitionsResponse(loan.getStatus(),
+            lifecycle.allowedTransitions(loan.getStatus(), currentUser.roles())));
     }
 
     @PostMapping("/{id}/status")
