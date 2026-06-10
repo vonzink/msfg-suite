@@ -8,6 +8,9 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import java.util.UUID;
+import static org.hamcrest.Matchers.hasItems;
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -89,6 +92,25 @@ class LoanControllerIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void loanOfficerIdDefaultsToCallerWhenOmitted() throws Exception {
+        mvc.perform(post("/api/loans").with(lo())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"loanPurpose\":\"PURCHASE\"}"))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.data.loanOfficerId").value(LO));
+    }
+
+    @Test
+    void explicitLoanOfficerIdIsUsedWhenProvided() throws Exception {
+        String explicitId = UUID.randomUUID().toString();
+        mvc.perform(post("/api/loans").with(lo())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"loanPurpose\":\"PURCHASE\",\"loanOfficerId\":\"%s\"}".formatted(explicitId)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.data.loanOfficerId").value(explicitId));
+    }
+
+    @Test
     void processorCannotCreate403() throws Exception {
         mvc.perform(post("/api/loans")
                 .with(user(UUID.randomUUID().toString(), "ROLE_PROCESSOR"))
@@ -98,10 +120,75 @@ class LoanControllerIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void transitionsForStartedLoanAsLo() throws Exception {
+        String id = createLoan();
+        mvc.perform(get("/api/loans/{id}/status/transitions", id).with(lo()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.currentStatus").value("STARTED"))
+            .andExpect(jsonPath("$.data.allowedTransitions", hasItems("APPLICATION_IN_PROGRESS", "WITHDRAWN", "CANCELLED")))
+            .andExpect(jsonPath("$.data.allowedTransitions", not(hasItem("APPROVED_WITH_CONDITIONS"))));
+    }
+
+    @Test
+    void transitionsRequiresToken() throws Exception {
+        String id = createLoan();
+        mvc.perform(get("/api/loans/{id}/status/transitions", id))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void transitionsCrossOrg404() throws Exception {
+        String id = createLoan();
+        mvc.perform(get("/api/loans/{id}/status/transitions", id)
+                .with(jwt().jwt(j -> j.subject(UUID.randomUUID().toString())
+                                      .claim("org_id", "ffffffff-ffff-ffff-ffff-ffffffffffff"))
+                           .authorities(new SimpleGrantedAuthority("ROLE_LO"))))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
     void otherLoCannotAccessSomeoneElsesLoan403() throws Exception {
         String id = createLoan();   // owned by LO
         mvc.perform(get("/api/loans/{id}", id)
                 .with(user(UUID.randomUUID().toString(), "ROLE_LO")))
             .andExpect(status().isForbidden());
+    }
+
+    /**
+     * End-to-end: drive a loan to IN_UNDERWRITING, then assert that a ROLE_UNDERWRITER JWT
+     * sees the gated targets (APPROVED_WITH_CONDITIONS, DENIED, SUSPENDED) in allowedTransitions.
+     */
+    @Test
+    void underwriterSeesGatedTransitionsForInUnderwritingLoan() throws Exception {
+        String id = createLoan(); // STARTED, owned by LO
+
+        // STARTED -> APPLICATION_IN_PROGRESS (LO, ungated)
+        mvc.perform(post("/api/loans/{id}/status", id).with(lo())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"targetStatus\":\"APPLICATION_IN_PROGRESS\",\"reason\":\"app\"}"))
+            .andExpect(status().isOk());
+
+        // APPLICATION_IN_PROGRESS -> SUBMITTED (LO, ungated)
+        mvc.perform(post("/api/loans/{id}/status", id).with(lo())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"targetStatus\":\"SUBMITTED\",\"reason\":\"submit\"}"))
+            .andExpect(status().isOk());
+
+        // SUBMITTED -> IN_UNDERWRITING (LO, ungated)
+        mvc.perform(post("/api/loans/{id}/status", id).with(lo())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"targetStatus\":\"IN_UNDERWRITING\",\"reason\":\"uw\"}"))
+            .andExpect(status().isOk());
+
+        // Now query transitions AS an underwriter (same sub as LO, same org — passes access guard)
+        // The underwriter role causes lifecycle.allowedTransitions to include the gated targets.
+        mvc.perform(get("/api/loans/{id}/status/transitions", id)
+                .with(jwt().jwt(j -> j.subject(LO).claim("org_id", DEFAULT_ORG))
+                           .authorities(new SimpleGrantedAuthority("ROLE_UNDERWRITER"))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.currentStatus").value("IN_UNDERWRITING"))
+            .andExpect(jsonPath("$.data.allowedTransitions", hasItem("APPROVED_WITH_CONDITIONS")))
+            .andExpect(jsonPath("$.data.allowedTransitions", hasItem("DENIED")))
+            .andExpect(jsonPath("$.data.allowedTransitions", hasItem("SUSPENDED")));
     }
 }

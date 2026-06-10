@@ -11,4 +11,4 @@ public record CreateLoanRequest(
     LienPriorityType lienPriority,
     AmortizationType amortizationType,
     BigDecimal noteAmount,
-    @NotNull UUID loanOfficerId) {}
+    UUID loanOfficerId) {}

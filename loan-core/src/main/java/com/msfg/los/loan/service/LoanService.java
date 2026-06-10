@@ -6,6 +6,7 @@ import com.msfg.los.loan.repo.*;
 import com.msfg.los.loan.web.dto.*;
 import com.msfg.los.platform.error.NotFoundException;
 import com.msfg.los.platform.error.ValidationException;
+import com.msfg.los.platform.security.CurrentUser;
 import com.msfg.los.platform.tenancy.OrgTenantResolver;
 import com.msfg.los.platform.tenancy.TenantContextHolder;
 import org.springframework.data.domain.Page;
@@ -23,20 +24,32 @@ public class LoanService {
     private final LoanStatusHistoryRepository histories;
     private final SequenceLoanNumberGenerator numberGen;
     private final LoanLifecycle lifecycle;
+    private final CurrentUser currentUser;
+    private final PrimaryBorrowerNameResolver resolver;
 
     public LoanService(LoanRepository loans, LoanStatusHistoryRepository histories,
-                       SequenceLoanNumberGenerator numberGen, LoanLifecycle lifecycle) {
+                       SequenceLoanNumberGenerator numberGen, LoanLifecycle lifecycle,
+                       CurrentUser currentUser, PrimaryBorrowerNameResolver resolver) {
         this.loans = loans;
         this.histories = histories;
         this.numberGen = numberGen;
         this.lifecycle = lifecycle;
+        this.currentUser = currentUser;
+        this.resolver = resolver;
     }
 
     @Transactional
     public Loan create(CreateLoanRequest req) {
+        UUID officer = req.loanOfficerId();
+        if (officer == null) {
+            officer = currentUser.id().map(s -> {
+                try { return UUID.fromString(s); } catch (RuntimeException e) { return null; }
+            }).orElse(null);
+        }
+        if (officer == null) throw new ValidationException("loanOfficerId is required");
         Loan loan = new Loan();
         loan.setLoanNumber(numberGen.next());
-        loan.setLoanOfficerId(req.loanOfficerId());
+        loan.setLoanOfficerId(officer);
         loan.setStatus(LoanStatus.STARTED);
         loan.setLoanPurpose(req.loanPurpose());
         loan.setMortgageType(req.mortgageType());
@@ -59,13 +72,18 @@ public class LoanService {
     }
 
     @Transactional(readOnly = true)
-    public Page<Loan> pipeline(UUID loanOfficerId, LoanStatus status, boolean admin, Pageable pageable) {
+    public Page<LoanListItemResponse> pipeline(UUID loanOfficerId, LoanStatus status, boolean admin, Pageable pageable) {
+        Page<Loan> page;
         if (admin) {
-            return status == null ? loans.findAll(pageable) : loans.findByStatus(status, pageable);
+            page = status == null ? loans.findAll(pageable) : loans.findByStatus(status, pageable);
+        } else {
+            page = status == null
+                ? loans.findByLoanOfficerId(loanOfficerId, pageable)
+                : loans.findByLoanOfficerIdAndStatus(loanOfficerId, status, pageable);
         }
-        return status == null
-            ? loans.findByLoanOfficerId(loanOfficerId, pageable)
-            : loans.findByLoanOfficerIdAndStatus(loanOfficerId, status, pageable);
+        var names = resolver.primaryBorrowerNamesByLoanIds(
+            page.map(Loan::getId).getContent());
+        return page.map(l -> LoanListItemResponse.from(l, names.get(l.getId())));
     }
 
     @Transactional

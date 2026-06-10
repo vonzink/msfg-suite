@@ -4,6 +4,9 @@ import com.msfg.los.platform.error.ConflictException;
 import com.msfg.los.platform.error.ForbiddenException;
 import com.msfg.los.platform.security.Role;
 import org.springframework.stereotype.Component;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import static com.msfg.los.loan.domain.LoanStatus.*;
@@ -33,6 +36,18 @@ public class LoanLifecycle {
         CLEAR_TO_CLOSE, Role.UNDERWRITER,
         FUNDED, Role.CLOSER
     );
+
+    public List<LoanStatus> allowedTransitions(LoanStatus from, Set<String> authorities) {
+        List<LoanStatus> out = new ArrayList<>();
+        FORWARD.getOrDefault(from, Set.of()).stream()
+            .sorted(Comparator.comparingInt(Enum::ordinal))
+            .forEach(out::add);
+        if (!from.isTerminal()) { out.add(LoanStatus.WITHDRAWN); out.add(LoanStatus.CANCELLED); }
+        return out.stream().filter(to -> {
+            Role required = ENTRY_ROLE.get(to);
+            return required == null || authorities.contains(required.authority()) || authorities.contains(Role.ADMIN.authority());
+        }).toList();
+    }
 
     public void assertTransition(LoanStatus from, LoanStatus to, Set<String> authorities) {
         if (from == to) throw new ConflictException("Loan already in status " + to);

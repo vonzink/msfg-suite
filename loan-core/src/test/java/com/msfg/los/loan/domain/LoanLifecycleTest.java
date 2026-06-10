@@ -43,4 +43,28 @@ class LoanLifecycleTest {
         assertThatThrownBy(() -> lifecycle.assertTransition(SUSPENDED, IN_UNDERWRITING, Set.of(Role.ADMIN.authority())))
             .isInstanceOf(ConflictException.class);
     }
+
+    // allowedTransitions tests
+    @Test void allowedTransitions_started_loAuthorities() {
+        var result = lifecycle.allowedTransitions(STARTED, Set.of(Role.LO.authority()));
+        assertThat(result).containsExactlyInAnyOrder(APPLICATION_IN_PROGRESS, WITHDRAWN, CANCELLED);
+    }
+
+    @Test void allowedTransitions_inUnderwriting_loFiltersGatedTargets() {
+        var result = lifecycle.allowedTransitions(IN_UNDERWRITING, Set.of(Role.LO.authority()));
+        assertThat(result).containsExactlyInAnyOrder(WITHDRAWN, CANCELLED);
+        assertThat(result).doesNotContain(APPROVED_WITH_CONDITIONS, DENIED, SUSPENDED);
+    }
+
+    @Test void allowedTransitions_inUnderwriting_underwriterIncludesGated() {
+        var result = lifecycle.allowedTransitions(IN_UNDERWRITING, Set.of(Role.UNDERWRITER.authority()));
+        assertThat(result).contains(APPROVED_WITH_CONDITIONS, DENIED, SUSPENDED, WITHDRAWN, CANCELLED);
+    }
+
+    @Test void allowedTransitions_terminalStatus_empty() {
+        assertThat(lifecycle.allowedTransitions(FUNDED, Set.of(Role.ADMIN.authority()))).isEmpty();
+        assertThat(lifecycle.allowedTransitions(WITHDRAWN, Set.of(Role.ADMIN.authority()))).isEmpty();
+        assertThat(lifecycle.allowedTransitions(CANCELLED, Set.of(Role.ADMIN.authority()))).isEmpty();
+        assertThat(lifecycle.allowedTransitions(DENIED, Set.of(Role.ADMIN.authority()))).isEmpty();
+    }
 }
