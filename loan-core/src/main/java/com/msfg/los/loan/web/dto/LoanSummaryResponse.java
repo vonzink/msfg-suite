@@ -32,7 +32,14 @@ public record LoanSummaryResponse(
     BigDecimal appraisedValue,
     PropertyType propertyType,
     OccupancyType occupancyType,
-    Integer numberOfUnits) {
+    Integer numberOfUnits,
+    // §3.1 additional fields
+    LienPriorityType lienPriority,
+    AmortizationType amortizationType,
+    String addressLine1,
+    String addressLine2,
+    String postalCode,
+    BigDecimal estimatedValue) {
 
     public static LoanSummaryResponse from(Loan l) {
         SubjectProperty sp = l.getSubjectProperty();
@@ -57,6 +64,12 @@ public record LoanSummaryResponse(
             sp != null ? sp.getAppraisedValue() : null,
             sp != null ? sp.getPropertyType() : null,
             sp != null ? sp.getOccupancyType() : null,
-            sp != null ? sp.getNumberOfUnits() : null);
+            sp != null ? sp.getNumberOfUnits() : null,
+            l.getLienPriority(),
+            l.getAmortizationType(),
+            sp != null ? sp.getAddressLine1() : null,
+            sp != null ? sp.getAddressLine2() : null,
+            sp != null ? sp.getPostalCode() : null,
+            sp != null ? sp.getEstimatedValue() : null);
     }
 }
