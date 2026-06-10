@@ -59,40 +59,57 @@ class LoanPipelineEnrichmentIT extends AbstractIntegrationTest {
                     """))
             .andExpect(status().isCreated());
 
-        // GET pipeline — find the row for this loan
+        // Single GET pipeline — find the row for this loan by id (race-free)
         String resp = mvc.perform(get("/api/loans").with(lo(LO_A)))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.items", hasSize(greaterThanOrEqualTo(1))))
             .andReturn().getResponse().getContentAsString();
 
-        // locate index of our loan in the items array
         com.jayway.jsonpath.DocumentContext doc = com.jayway.jsonpath.JsonPath.parse(resp);
-        java.util.List<String> ids = doc.read("$.data.items[*].id");
-        int idx = ids.indexOf(loanId);
-        org.assertj.core.api.Assertions.assertThat(idx).as("loan must appear in pipeline").isGreaterThanOrEqualTo(0);
 
-        mvc.perform(get("/api/loans").with(lo(LO_A)))
-            .andExpect(jsonPath("$.data.items[%d].primaryBorrowerName".formatted(idx)).value("Abbas Hussein"))
-            .andExpect(jsonPath("$.data.items[%d].propertyCity".formatted(idx)).value("Denver"))
-            .andExpect(jsonPath("$.data.items[%d].propertyState".formatted(idx)).value("CO"))
-            .andExpect(jsonPath("$.data.items[%d].updatedAt".formatted(idx)).isNotEmpty());
+        // Assert enrichment fields via JsonPath filter on id — independent of array position
+        java.util.List<String> names = doc.read(
+                "$.data.items[?(@.id=='" + loanId + "')].primaryBorrowerName");
+        org.assertj.core.api.Assertions.assertThat(names).as("loan must appear in pipeline").hasSize(1);
+        org.assertj.core.api.Assertions.assertThat(names.get(0)).isEqualTo("Abbas Hussein");
+
+        java.util.List<String> cities = doc.read(
+                "$.data.items[?(@.id=='" + loanId + "')].propertyCity");
+        org.assertj.core.api.Assertions.assertThat(cities).hasSize(1);
+        org.assertj.core.api.Assertions.assertThat(cities.get(0)).isEqualTo("Denver");
+
+        java.util.List<String> states = doc.read(
+                "$.data.items[?(@.id=='" + loanId + "')].propertyState");
+        org.assertj.core.api.Assertions.assertThat(states).hasSize(1);
+        org.assertj.core.api.Assertions.assertThat(states.get(0)).isEqualTo("CO");
+
+        java.util.List<Object> updatedAts = doc.read(
+                "$.data.items[?(@.id=='" + loanId + "')].updatedAt");
+        org.assertj.core.api.Assertions.assertThat(updatedAts).hasSize(1);
+        org.assertj.core.api.Assertions.assertThat(updatedAts.get(0)).isNotNull();
     }
 
     @Test
     void pipelineItem_nullBorrowerName_whenNoBorrower() throws Exception {
         String loanId = createLoan(LO_B);
 
+        // Single GET — find the row by id (race-free)
         String resp = mvc.perform(get("/api/loans").with(lo(LO_B)))
             .andExpect(status().isOk())
             .andReturn().getResponse().getContentAsString();
 
         com.jayway.jsonpath.DocumentContext doc = com.jayway.jsonpath.JsonPath.parse(resp);
-        java.util.List<String> ids = doc.read("$.data.items[*].id");
-        int idx = ids.indexOf(loanId);
-        org.assertj.core.api.Assertions.assertThat(idx).as("loan must appear in pipeline").isGreaterThanOrEqualTo(0);
 
-        // primaryBorrowerName must be null (JSON null or absent)
-        Object name = doc.read("$.data.items[%d].primaryBorrowerName".formatted(idx));
-        org.assertj.core.api.Assertions.assertThat(name).isNull();
+        // Loan must appear in pipeline
+        java.util.List<String> ids = doc.read("$.data.items[*].id");
+        org.assertj.core.api.Assertions.assertThat(ids).as("loan must appear in pipeline").contains(loanId);
+
+        // primaryBorrowerName must be null (JSON null or absent) — filter by id
+        java.util.List<Object> names = doc.read(
+                "$.data.items[?(@.id=='" + loanId + "')].primaryBorrowerName");
+        // JsonPath filter omits null-valued keys entirely, so either empty list or [null]
+        if (!names.isEmpty()) {
+            org.assertj.core.api.Assertions.assertThat(names.get(0)).isNull();
+        }
     }
 }

@@ -153,4 +153,42 @@ class LoanControllerIT extends AbstractIntegrationTest {
                 .with(user(UUID.randomUUID().toString(), "ROLE_LO")))
             .andExpect(status().isForbidden());
     }
+
+    /**
+     * End-to-end: drive a loan to IN_UNDERWRITING, then assert that a ROLE_UNDERWRITER JWT
+     * sees the gated targets (APPROVED_WITH_CONDITIONS, DENIED, SUSPENDED) in allowedTransitions.
+     */
+    @Test
+    void underwriterSeesGatedTransitionsForInUnderwritingLoan() throws Exception {
+        String id = createLoan(); // STARTED, owned by LO
+
+        // STARTED -> APPLICATION_IN_PROGRESS (LO, ungated)
+        mvc.perform(post("/api/loans/{id}/status", id).with(lo())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"targetStatus\":\"APPLICATION_IN_PROGRESS\",\"reason\":\"app\"}"))
+            .andExpect(status().isOk());
+
+        // APPLICATION_IN_PROGRESS -> SUBMITTED (LO, ungated)
+        mvc.perform(post("/api/loans/{id}/status", id).with(lo())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"targetStatus\":\"SUBMITTED\",\"reason\":\"submit\"}"))
+            .andExpect(status().isOk());
+
+        // SUBMITTED -> IN_UNDERWRITING (LO, ungated)
+        mvc.perform(post("/api/loans/{id}/status", id).with(lo())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"targetStatus\":\"IN_UNDERWRITING\",\"reason\":\"uw\"}"))
+            .andExpect(status().isOk());
+
+        // Now query transitions AS an underwriter (same sub as LO, same org — passes access guard)
+        // The underwriter role causes lifecycle.allowedTransitions to include the gated targets.
+        mvc.perform(get("/api/loans/{id}/status/transitions", id)
+                .with(jwt().jwt(j -> j.subject(LO).claim("org_id", DEFAULT_ORG))
+                           .authorities(new SimpleGrantedAuthority("ROLE_UNDERWRITER"))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.currentStatus").value("IN_UNDERWRITING"))
+            .andExpect(jsonPath("$.data.allowedTransitions", hasItem("APPROVED_WITH_CONDITIONS")))
+            .andExpect(jsonPath("$.data.allowedTransitions", hasItem("DENIED")))
+            .andExpect(jsonPath("$.data.allowedTransitions", hasItem("SUSPENDED")));
+    }
 }

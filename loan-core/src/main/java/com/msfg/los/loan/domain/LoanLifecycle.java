@@ -4,6 +4,9 @@ import com.msfg.los.platform.error.ConflictException;
 import com.msfg.los.platform.error.ForbiddenException;
 import com.msfg.los.platform.security.Role;
 import org.springframework.stereotype.Component;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import static com.msfg.los.loan.domain.LoanStatus.*;
@@ -34,10 +37,10 @@ public class LoanLifecycle {
         FUNDED, Role.CLOSER
     );
 
-    public java.util.List<LoanStatus> allowedTransitions(LoanStatus from, java.util.Set<String> authorities) {
-        java.util.List<LoanStatus> out = new java.util.ArrayList<>();
-        FORWARD.getOrDefault(from, java.util.Set.of()).stream()
-            .sorted(java.util.Comparator.comparingInt(Enum::ordinal))
+    public List<LoanStatus> allowedTransitions(LoanStatus from, Set<String> authorities) {
+        List<LoanStatus> out = new ArrayList<>();
+        FORWARD.getOrDefault(from, Set.of()).stream()
+            .sorted(Comparator.comparingInt(Enum::ordinal))
             .forEach(out::add);
         if (!from.isTerminal()) { out.add(LoanStatus.WITHDRAWN); out.add(LoanStatus.CANCELLED); }
         return out.stream().filter(to -> {
