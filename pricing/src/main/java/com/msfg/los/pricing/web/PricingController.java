@@ -1,0 +1,42 @@
+package com.msfg.los.pricing.web;
+
+import com.msfg.los.platform.web.ApiResponse;
+import com.msfg.los.pricing.service.PricingService;
+import com.msfg.los.pricing.web.dto.LockEventResponse;
+import com.msfg.los.pricing.web.dto.PricingAdjustmentResponse;
+import com.msfg.los.pricing.web.dto.PricingResponse;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/api/loans/{loanId}/pricing")
+public class PricingController {
+
+    private final PricingService service;
+
+    public PricingController(PricingService service) {
+        this.service = service;
+    }
+
+    @GetMapping
+    public ApiResponse<PricingResponse> pricing(@PathVariable UUID loanId) {
+        return ApiResponse.ok(service.view(loanId));
+    }
+
+    @GetMapping("/adjustments")
+    public ApiResponse<List<PricingAdjustmentResponse>> adjustments(@PathVariable UUID loanId) {
+        return ApiResponse.ok(service.adjustments(loanId).stream()
+                .map(PricingAdjustmentResponse::from).toList());
+    }
+
+    @GetMapping("/lock/history")
+    public ApiResponse<List<LockEventResponse>> lockHistory(@PathVariable UUID loanId) {
+        return ApiResponse.ok(service.history(loanId).stream()
+                .map(LockEventResponse::from).toList());
+    }
+}
