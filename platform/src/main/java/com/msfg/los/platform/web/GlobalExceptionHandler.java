@@ -3,6 +3,8 @@ package com.msfg.los.platform.web;
 import com.msfg.los.platform.error.DomainException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -26,6 +28,16 @@ public class GlobalExceptionHandler {
         ex.getBindingResult().getFieldErrors().forEach(f -> fields.put(f.getField(), f.getDefaultMessage()));
         return ResponseEntity.badRequest()
             .body(ApiError.of("VALIDATION_ERROR", "Validation failed", fields, Instant.now()));
+    }
+
+    // DB constraint violations (unique/check) reach here only on races that beat an app-level
+    // pre-check (e.g. concurrent duplicate-key inserts) — the conflict answer is 409, not 500.
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiError> handleDataIntegrity(DataIntegrityViolationException ex) {
+        log.warn("Data integrity violation: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(ApiError.of("CONFLICT", "Conflicting resource state (duplicate or constraint violation)",
+                Map.of(), Instant.now()));
     }
 
     // Catch-all so unexpected failures return our ApiError envelope (not Spring's default /error shape).

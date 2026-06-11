@@ -46,7 +46,7 @@ public class FeeTotalsService {
             sectionTotals.put(s.name(), ZERO);
         }
 
-        fees.findByLoanIdOrderByOrdinalAsc(loanId).forEach(f ->
+        fees.findByLoanIdOrderByOrdinalAscIdAsc(loanId).forEach(f ->
                 sectionTotals.merge(f.getSection().name(), nz(f.getAmount()), BigDecimal::add));
 
         Function<FeeSection, BigDecimal> S = sec -> sectionTotals.get(sec.name());

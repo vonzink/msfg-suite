@@ -35,6 +35,14 @@ public class FeeController {
                 .body(ApiResponse.ok(FeeLineItemResponse.from(service.add(loanId, req))));
     }
 
+    /** Upsert by (section,label) — the frontend's Record key. 200 for both create and update. */
+    @PutMapping
+    public ApiResponse<FeeLineItemResponse> upsert(
+            @PathVariable UUID loanId,
+            @Valid @RequestBody AddFeeRequest req) {
+        return ApiResponse.ok(FeeLineItemResponse.from(service.upsert(loanId, req)));
+    }
+
     @GetMapping
     public ApiResponse<List<FeeLineItemResponse>> list(@PathVariable UUID loanId) {
         return ApiResponse.ok(service.list(loanId).stream().map(FeeLineItemResponse::from).toList());

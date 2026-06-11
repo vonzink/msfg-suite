@@ -110,17 +110,59 @@ class FeeControllerIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data.label").value("Origination Fee"));
     }
 
-    // --- negative amount → 400 with $.message ~ "amount" ---
+    // --- credit sections: negative amounts are legitimate (prorations, section-L credits) ---
 
     @Test
-    void negativeAmountReturns400() throws Exception {
+    void postAcceptsNegativeAmountForCreditSections() throws Exception {
         String loanId = createLoan();
 
         mvc.perform(post("/api/loans/{l}/fees", loanId).with(lo())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"section\":\"A\",\"label\":\"Bad Fee\",\"amount\":-1}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value(containsString("amount")));
+                        .content("{\"section\":\"L\",\"label\":\"Lender Credit\",\"amount\":-500}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.amount").value(-500));
+    }
+
+    @Test
+    void patchAcceptsNegativeAmount() throws Exception {
+        String loanId = createLoan();
+        String feeId = addFee(loanId, "PRORATIONS", "County Tax Proration", 0);
+
+        mvc.perform(patch("/api/loans/{l}/fees/{f}", loanId, feeId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\":-100}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.amount").value(-100));
+    }
+
+    // --- blank label → 400 (label is part of the unique key) ---
+
+    @Test
+    void blankLabelReturns400() throws Exception {
+        String loanId = createLoan();
+
+        mvc.perform(post("/api/loans/{l}/fees", loanId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"section\":\"H\",\"label\":\"\",\"amount\":10}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    // --- ordinal is max+1, never reused after a delete ---
+
+    @Test
+    void ordinalNotReusedAfterDelete() throws Exception {
+        String loanId = createLoan();
+        String f1 = addFee(loanId, "A", "Origination Fee", 100);   // ordinal 0
+        addFee(loanId, "B", "Appraisal Fee", 200);                  // ordinal 1
+
+        mvc.perform(delete("/api/loans/{l}/fees/{f}", loanId, f1).with(lo()))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(post("/api/loans/{l}/fees", loanId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"section\":\"C\",\"label\":\"Survey Fee\",\"amount\":300}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.ordinal").value(2));
     }
 
     // --- DELETE → 204 + list excludes it ---

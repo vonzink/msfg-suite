@@ -16,4 +16,13 @@ class GlobalExceptionHandlerTest {
         assertThat(resp.getBody().code()).isEqualTo("NOT_FOUND");
         assertThat(resp.getBody().message()).contains("abc");
     }
+
+    @Test
+    void mapsDataIntegrityViolationTo409Conflict() {
+        ResponseEntity<ApiError> resp = handler.handleDataIntegrity(
+                new org.springframework.dao.DataIntegrityViolationException("duplicate key"));
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(resp.getBody().code()).isEqualTo("CONFLICT");
+        assertThat(resp.getBody().fields()).isEmpty();
+    }
 }

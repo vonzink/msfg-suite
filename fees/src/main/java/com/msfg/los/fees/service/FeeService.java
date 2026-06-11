@@ -45,16 +45,24 @@ public class FeeService {
                 .orElseThrow(() -> new NotFoundException("FeeLineItem", feeId));
     }
 
+    // amount/sellerConcession may be negative: PRORATIONS and section-L rows are credits.
+    private void requireNonNegativePercent(BigDecimal percent) {
+        if (percent != null && percent.signum() < 0)
+            throw new ValidationException("percent must be >= 0");
+    }
+
+    // max+1, not count: count reuses ordinals after a delete.
+    private int nextOrdinal(UUID loanId) {
+        return fees.findTopByLoanIdOrderByOrdinalDesc(loanId)
+                .map(f -> f.getOrdinal() + 1)
+                .orElse(0);
+    }
+
     @Transactional
     public FeeLineItem add(UUID loanId, AddFeeRequest req) {
         accessGuard.assertCanAccess(loanService.get(loanId));
 
-        if (req.amount() != null && req.amount().signum() < 0)
-            throw new ValidationException("amount must be >= 0");
-        if (req.sellerConcession() != null && req.sellerConcession().signum() < 0)
-            throw new ValidationException("sellerConcession must be >= 0");
-        if (req.percent() != null && req.percent().signum() < 0)
-            throw new ValidationException("percent must be >= 0");
+        requireNonNegativePercent(req.percent());
 
         if (fees.existsByLoanIdAndSectionAndLabel(loanId, req.section(), req.label()))
             throw new ConflictException("Fee already exists for section " + req.section() + " / " + req.label());
@@ -66,14 +74,40 @@ public class FeeService {
         f.setAmount(req.amount());
         f.setSellerConcession(req.sellerConcession());
         f.setPercent(req.percent());
-        f.setOrdinal((int) fees.countByLoanId(loanId));
+        f.setOrdinal(nextOrdinal(loanId));
+        return fees.save(f);
+    }
+
+    /**
+     * Create-or-update keyed by (section,label) — the frontend's Record key.
+     * PUT semantics: amount/sellerConcession/percent are replaced wholesale;
+     * ordinal is assigned on create and stable on update.
+     */
+    @Transactional
+    public FeeLineItem upsert(UUID loanId, AddFeeRequest req) {
+        accessGuard.assertCanAccess(loanService.get(loanId));
+
+        requireNonNegativePercent(req.percent());
+
+        FeeLineItem f = fees.findByLoanIdAndSectionAndLabel(loanId, req.section(), req.label())
+                .orElseGet(() -> {
+                    FeeLineItem n = new FeeLineItem();
+                    n.setLoanId(loanId);
+                    n.setSection(req.section());
+                    n.setLabel(req.label());
+                    n.setOrdinal(nextOrdinal(loanId));
+                    return n;
+                });
+        f.setAmount(req.amount());
+        f.setSellerConcession(req.sellerConcession());
+        f.setPercent(req.percent());
         return fees.save(f);
     }
 
     @Transactional(readOnly = true)
     public List<FeeLineItem> list(UUID loanId) {
         accessGuard.assertCanAccess(loanService.get(loanId));
-        return fees.findByLoanIdOrderByOrdinalAsc(loanId);
+        return fees.findByLoanIdOrderByOrdinalAscIdAsc(loanId);
     }
 
     @Transactional
@@ -82,18 +116,13 @@ public class FeeService {
         FeeLineItem f = load(loanId, feeId);
 
         if (req.amount() != null) {
-            if (req.amount().signum() < 0)
-                throw new ValidationException("amount must be >= 0");
             f.setAmount(req.amount());
         }
         if (req.sellerConcession() != null) {
-            if (req.sellerConcession().signum() < 0)
-                throw new ValidationException("sellerConcession must be >= 0");
             f.setSellerConcession(req.sellerConcession());
         }
         if (req.percent() != null) {
-            if (req.percent().signum() < 0)
-                throw new ValidationException("percent must be >= 0");
+            requireNonNegativePercent(req.percent());
             f.setPercent(req.percent());
         }
         return fees.save(f);

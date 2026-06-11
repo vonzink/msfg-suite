@@ -10,11 +10,13 @@ import java.util.UUID;
 
 public interface FeeLineItemRepository extends JpaRepository<FeeLineItem, UUID> {
 
-    List<FeeLineItem> findByLoanIdOrderByOrdinalAsc(UUID loanId);
+    List<FeeLineItem> findByLoanIdOrderByOrdinalAscIdAsc(UUID loanId);
 
     Optional<FeeLineItem> findByIdAndOrgId(UUID id, UUID orgId);
 
     boolean existsByLoanIdAndSectionAndLabel(UUID loanId, FeeSection section, String label);
 
-    long countByLoanId(UUID loanId);
+    Optional<FeeLineItem> findByLoanIdAndSectionAndLabel(UUID loanId, FeeSection section, String label);
+
+    Optional<FeeLineItem> findTopByLoanIdOrderByOrdinalDesc(UUID loanId);
 }
