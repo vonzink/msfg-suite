@@ -63,4 +63,10 @@ public class PricingController {
                                                    @Valid @RequestBody RateChangeRequest req) {
         return ApiResponse.ok(service.rateChange(loanId, req));
     }
+
+    @PostMapping("/lock/relock")
+    public ApiResponse<PricingResponse> relock(@PathVariable UUID loanId,
+                                               @Valid @RequestBody LockTermsRequest req) {
+        return ApiResponse.ok(service.relock(loanId, req));
+    }
 }

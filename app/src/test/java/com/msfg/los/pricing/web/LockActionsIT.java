@@ -4,6 +4,7 @@ import com.msfg.los.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
@@ -18,6 +19,9 @@ class LockActionsIT extends AbstractIntegrationTest {
 
     @Autowired
     MockMvc mvc;
+
+    @Autowired
+    JdbcTemplate jdbc;
 
     static final String LO = UUID.randomUUID().toString();
 
@@ -153,6 +157,91 @@ class LockActionsIT extends AbstractIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON).content(cypBody())).andExpect(status().isOk());
         mvc.perform(post("/api/loans/{id}/pricing/lock/extend", loanId).with(lo())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"additionalDays\": 0}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fields.additionalDays").exists());
+    }
+
+    /** Force the lock past expiration with raw SQL (bypasses Hibernate/@TenantId; owner datasource so RLS doesn't block). */
+    void forceExpired(String loanId) {
+        jdbc.update("update rate_lock set expiration_date = current_date - 1 where loan_id = ?::uuid", loanId);
+    }
+
+    @Test
+    void expiredLock_readsAsExpired_andRelockResetsIt() throws Exception {
+        String loanId = priceableLoan();
+        mvc.perform(post("/api/loans/{id}/pricing/lock/control-your-price", loanId).with(lo())
+                .contentType(MediaType.APPLICATION_JSON).content(cypBody())).andExpect(status().isOk());
+        // extend so extensionDaysTotal is nonzero, then expire
+        mvc.perform(post("/api/loans/{id}/pricing/lock/extend", loanId).with(lo())
+                .contentType(MediaType.APPLICATION_JSON).content("{\"additionalDays\": 15}")).andExpect(status().isOk());
+        forceExpired(loanId);
+
+        mvc.perform(get("/api/loans/{id}/pricing", loanId).with(lo()))
+                .andExpect(jsonPath("$.data.lockStatus").value("EXPIRED"));
+
+        mvc.perform(post("/api/loans/{id}/pricing/lock/relock", loanId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"rate\": 6.75, \"commitmentDays\": 15, \"compensationPayerType\": \"LENDER_PAID\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.lockStatus").value("LOCKED"))
+                .andExpect(jsonPath("$.data.interestRate").value(6.75))
+                .andExpect(jsonPath("$.data.commitmentDays").value(15))
+                .andExpect(jsonPath("$.data.extensionDaysTotal").value(0));
+
+        // extension row gone after relock (6 rows again)
+        mvc.perform(get("/api/loans/{id}/pricing/adjustments", loanId).with(lo()))
+                .andExpect(jsonPath("$.data.length()").value(6));
+
+        mvc.perform(get("/api/loans/{id}/pricing/lock/history", loanId).with(lo()))
+                .andExpect(jsonPath("$.data.length()").value(3))
+                .andExpect(jsonPath("$.data[2].action").value("RELOCK"));
+    }
+
+    @Test
+    void relock_onActiveLock_409() throws Exception {
+        String loanId = priceableLoan();
+        mvc.perform(post("/api/loans/{id}/pricing/lock/control-your-price", loanId).with(lo())
+                .contentType(MediaType.APPLICATION_JSON).content(cypBody())).andExpect(status().isOk());
+        mvc.perform(post("/api/loans/{id}/pricing/lock/relock", loanId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON).content(cypBody()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("LOCK_STATE_CONFLICT"));
+    }
+
+    @Test
+    void relock_neverLocked_409() throws Exception {
+        String loanId = priceableLoan();
+        mvc.perform(post("/api/loans/{id}/pricing/lock/relock", loanId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON).content(cypBody()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("LOCK_STATE_CONFLICT"));
+    }
+
+    @Test
+    void expiredLock_blocksExtendRateChangeAndCyp() throws Exception {
+        String loanId = priceableLoan();
+        mvc.perform(post("/api/loans/{id}/pricing/lock/control-your-price", loanId).with(lo())
+                .contentType(MediaType.APPLICATION_JSON).content(cypBody())).andExpect(status().isOk());
+        forceExpired(loanId);
+
+        mvc.perform(post("/api/loans/{id}/pricing/lock/extend", loanId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"additionalDays\": 15}"))
+                .andExpect(status().isConflict());
+        mvc.perform(post("/api/loans/{id}/pricing/lock/rate-change", loanId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"rate\": 7.0}"))
+                .andExpect(status().isConflict());
+        mvc.perform(post("/api/loans/{id}/pricing/lock/control-your-price", loanId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON).content(cypBody()))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void extend_additionalDaysAboveMax_400() throws Exception {
+        String loanId = priceableLoan();
+        mvc.perform(post("/api/loans/{id}/pricing/lock/control-your-price", loanId).with(lo())
+                .contentType(MediaType.APPLICATION_JSON).content(cypBody())).andExpect(status().isOk());
+        mvc.perform(post("/api/loans/{id}/pricing/lock/extend", loanId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"additionalDays\": 61}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.fields.additionalDays").exists());
     }

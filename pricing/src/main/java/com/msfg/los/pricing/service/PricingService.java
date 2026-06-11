@@ -129,6 +129,17 @@ public class PricingService {
         return view(loanId);
     }
 
+    @Transactional
+    public PricingResponse relock(UUID loanId, LockTermsRequest req) {
+        Loan loan = loadGuarded(loanId);
+        assertNotTerminal(loan);
+        RateLock lock = requireLockInState(loanId, RateLockStatus.EXPIRED, "relock");
+        applyTerms(lock, req);
+        lock.setExtensionDaysTotal(0);
+        requoteAndRecord(loan, lock, LockAction.RELOCK);
+        return view(loanId);
+    }
+
     private RateLock requireLockInState(UUID loanId, RateLockStatus required, String action) {
         RateLock lock = locks.findByLoanId(loanId)
                 .orElseThrow(() -> new LockStateConflictException(
