@@ -61,6 +61,9 @@ The backend validates **RS256 Cognito JWTs** as a resource server (stateless; se
 - **Roles** come from the `cognito:groups` claim, mapped to `ROLE_*`. Known roles:
   `LO`, `PROCESSOR`, `UNDERWRITER`, `CLOSER`, `ADMIN`, `PLATFORM_ADMIN`. The UI should gate features by role
   (e.g. only `LO`/`ADMIN` may create loans; `/api/admin/**` is `PLATFORM_ADMIN` only).
+- **Loan visibility (2026-06-11):** back-office roles (`PROCESSOR`/`UNDERWRITER`/`CLOSER`) have **org-wide**
+  loan access — they see every loan in the pipeline and can open/work any of them (per-action gates still apply,
+  e.g. CoC decisions stay UNDERWRITER/ADMIN). `LO`s see only their own loans. `PLATFORM_ADMIN` has no loan access.
 - **Local shortcut:** in the `local` profile there is NO real auth — every request is a dev ADMIN
   (`org_id = 00000000-0000-0000-0000-0000000000aa`). Build and demo without Cognito; add the real flow before dev/prod.
 
