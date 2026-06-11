@@ -2,10 +2,12 @@ package com.msfg.los.pricing.web;
 
 import com.msfg.los.platform.web.ApiResponse;
 import com.msfg.los.pricing.service.PricingService;
+import com.msfg.los.pricing.web.dto.ExtendLockRequest;
 import com.msfg.los.pricing.web.dto.LockEventResponse;
 import com.msfg.los.pricing.web.dto.LockTermsRequest;
 import com.msfg.los.pricing.web.dto.PricingAdjustmentResponse;
 import com.msfg.los.pricing.web.dto.PricingResponse;
+import com.msfg.los.pricing.web.dto.RateChangeRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -48,5 +50,17 @@ public class PricingController {
     public ApiResponse<PricingResponse> controlYourPrice(@PathVariable UUID loanId,
                                                          @Valid @RequestBody LockTermsRequest req) {
         return ApiResponse.ok(service.controlYourPrice(loanId, req));
+    }
+
+    @PostMapping("/lock/extend")
+    public ApiResponse<PricingResponse> extend(@PathVariable UUID loanId,
+                                               @Valid @RequestBody ExtendLockRequest req) {
+        return ApiResponse.ok(service.extend(loanId, req));
+    }
+
+    @PostMapping("/lock/rate-change")
+    public ApiResponse<PricingResponse> rateChange(@PathVariable UUID loanId,
+                                                   @Valid @RequestBody RateChangeRequest req) {
+        return ApiResponse.ok(service.rateChange(loanId, req));
     }
 }

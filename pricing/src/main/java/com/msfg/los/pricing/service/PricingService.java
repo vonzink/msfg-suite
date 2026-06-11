@@ -15,8 +15,10 @@ import com.msfg.los.pricing.port.QuoteRow;
 import com.msfg.los.pricing.repo.LockEventRepository;
 import com.msfg.los.pricing.repo.PricingAdjustmentRepository;
 import com.msfg.los.pricing.repo.RateLockRepository;
+import com.msfg.los.pricing.web.dto.ExtendLockRequest;
 import com.msfg.los.pricing.web.dto.LockTermsRequest;
 import com.msfg.los.pricing.web.dto.PricingResponse;
+import com.msfg.los.pricing.web.dto.RateChangeRequest;
 import com.msfg.los.qualification.service.LoanCalculationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -104,6 +106,39 @@ public class PricingService {
         lock.setExtensionDaysTotal(0);
         requoteAndRecord(loan, lock, LockAction.CONTROL_YOUR_PRICE);
         return view(loanId);
+    }
+
+    @Transactional
+    public PricingResponse extend(UUID loanId, ExtendLockRequest req) {
+        Loan loan = loadGuarded(loanId);
+        assertNotTerminal(loan);
+        RateLock lock = requireLockInState(loanId, RateLockStatus.LOCKED, "extend");
+        lock.setExpirationDate(lock.getExpirationDate().plusDays(req.additionalDays()));
+        lock.setExtensionDaysTotal(lock.getExtensionDaysTotal() + req.additionalDays());
+        requoteAndRecord(loan, lock, LockAction.EXTEND);
+        return view(loanId);
+    }
+
+    @Transactional
+    public PricingResponse rateChange(UUID loanId, RateChangeRequest req) {
+        Loan loan = loadGuarded(loanId);
+        assertNotTerminal(loan);
+        RateLock lock = requireLockInState(loanId, RateLockStatus.LOCKED, "rate-change");
+        lock.setLockedRate(req.rate());
+        requoteAndRecord(loan, lock, LockAction.RATE_CHANGE);
+        return view(loanId);
+    }
+
+    private RateLock requireLockInState(UUID loanId, RateLockStatus required, String action) {
+        RateLock lock = locks.findByLoanId(loanId)
+                .orElseThrow(() -> new LockStateConflictException(
+                        "Loan is NOT_LOCKED — cannot " + action));
+        RateLockStatus actual = RateLockStatus.effective(lock.getExpirationDate(), today());
+        if (actual != required) {
+            throw new LockStateConflictException(
+                    "Lock is " + actual + " — cannot " + action);
+        }
+        return lock;
     }
 
     private Loan loadGuarded(UUID loanId) {
