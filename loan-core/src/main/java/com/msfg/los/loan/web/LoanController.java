@@ -48,7 +48,7 @@ public class LoanController {
         UUID me = currentUser.id().map(id -> {
             try { return UUID.fromString(id); } catch (IllegalArgumentException e) { return null; }
         }).orElse(null);
-        Page<LoanListItemResponse> result = service.pipeline(me, status, currentUser.isAdmin(), PageRequest.of(page, size));
+        Page<LoanListItemResponse> result = service.pipeline(me, status, accessGuard.hasOrgWideView(), PageRequest.of(page, size));
         return ApiResponse.ok(PagedResponse.from(result));
     }
 

@@ -72,9 +72,9 @@ public class LoanService {
     }
 
     @Transactional(readOnly = true)
-    public Page<LoanListItemResponse> pipeline(UUID loanOfficerId, LoanStatus status, boolean admin, Pageable pageable) {
+    public Page<LoanListItemResponse> pipeline(UUID loanOfficerId, LoanStatus status, boolean orgWideView, Pageable pageable) {
         Page<Loan> page;
-        if (admin) {
+        if (orgWideView) {
             page = status == null ? loans.findAll(pageable) : loans.findByStatus(status, pageable);
         } else {
             page = status == null
