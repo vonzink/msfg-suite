@@ -111,11 +111,16 @@ Exact schemas: see `/v3/api-docs`.
   - `POST|GET|PATCH|DELETE /api/loans/{loanId}/fees[/{feeId}]` — fee line-item CRUD. `{section, label, amount, sellerConcession, percent?}`. **Id-based**: POST returns the row with its `id` (use it for PATCH/DELETE); **POST with a duplicate `section`+`label` → 409**. (`section` is the `FeeSection` enum: SELLER_CONCESSIONS, A, B, C, E, F, G, PRORATIONS, H, K, L, REC.)
   - `GET /api/loans/{loanId}/fees/totals` → `{ sectionTotals: { "A": …, "B": …, … }, categoryTotals: { origination, didNotShop, didShop, taxesGov, escrowPrepaids } }` — **server-computed**, mirrors your `categoryTotals` exactly (`escrowPrepaids = F+G`; sums `amount` only). Every section present (0 if empty).
   - `GET /api/loans/{loanId}/fees/invoices` · `PUT /api/loans/{loanId}/fees/invoices` — invoice entries, **upsert by `feeLabel`**. Body/response include `"final": boolean` (the JSON field is literally `final`).
+- **Change of Circumstance** (processing — mirrors `src/features/coc/cocModel.ts`)
+  - `GET|PUT /api/loans/{loanId}/coc/draft` — the 1:1 editable draft `{dateOfDiscovery?, reason?, structureChanges[], feeChanges[]}` (upsert; GET-before-save → 200 empty arrays, not 404). `reason` is the `CocReason` enum; `feeChange.reason`/`hasInvoice` are free-form strings.
+  - `POST /api/loans/{loanId}/coc/submit` `{reason (required), dateOfDiscovery?, structureChanges[], feeChanges[]}` → 201 a **PENDING** `CocHistoryEntry`; **clears the draft** (GET draft → empty afterward). Missing `reason` → **400** `VALIDATION_ERROR` with `fields.reason`.
+  - `GET /api/loans/{loanId}/coc/history` → entries newest-first (`status`, `submittedAt`, `submittedBy`, `decisionBy`, `decisionDate`).
+  - `POST /api/loans/{loanId}/coc/history/{entryId}/decision` `{decision: "ACCEPT"|"DENY"}` → **UNDERWRITER/ADMIN only** (LO → 403); only on a PENDING entry (already-decided → 409). Sets `status` + `decisionBy` + `decisionDate`.
 - **Admin** (platform)
   - `/api/admin/**` — org/tenant provisioning etc. (`PLATFORM_ADMIN` only).
 
 **✅ The full 1003 (URLA) is merged and live** — every screen in your build plan is buildable now (Specs 1–7).
-*Processing-stage modules: **Fees ✅ shipped.** Coming next (additive): Change of Circumstance → Document Manager →
+*Processing-stage modules: **Fees ✅ · Change of Circumstance ✅ shipped.** Coming next (additive): Document Manager →
 Pricing/Lock → AUS → disclosures; plus small deferred bits — Details-of-Transaction/cash-to-close (Spec 6C),
 down-payment-source checkboxes, multi-lien/joint REO. Watch `/v3/api-docs` + `docs/ROADMAP.md`.*
 
