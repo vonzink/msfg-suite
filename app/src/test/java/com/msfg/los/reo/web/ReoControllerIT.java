@@ -97,6 +97,32 @@ class ReoControllerIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data[1].ordinal").value(1));
     }
 
+    // --- ordinal survives deletes: max+1, never a reused count ---
+
+    @Test
+    void addAfterDeleteAssignsMaxPlusOneNotCount() throws Exception {
+        String loanId = createLoan();
+
+        String first = addReo(loanId, "100000");   // ordinal 0
+        addReo(loanId, "200000");                  // ordinal 1
+
+        mvc.perform(delete("/api/loans/{l}/reo/{r}", loanId, first).with(lo()))
+                .andExpect(status().isNoContent());
+
+        // survivor holds ordinal 1; count would reassign 1 (collision) — must be max+1 = 2
+        mvc.perform(post("/api/loans/{l}/reo", loanId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"propertyType\":\"CONDOMINIUM\",\"propertyStatus\":\"RENTAL\",\"marketValue\":300000}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.ordinal").value(2));
+
+        mvc.perform(get("/api/loans/{l}/reo", loanId).with(lo()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[0].ordinal").value(1))
+                .andExpect(jsonPath("$.data[1].ordinal").value(2));
+    }
+
     // --- PATCH updates a field, leaves others unchanged ---
 
     @Test

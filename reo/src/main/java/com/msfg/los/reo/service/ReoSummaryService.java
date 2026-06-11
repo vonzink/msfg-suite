@@ -38,7 +38,7 @@ public class ReoSummaryService {
     public ReoSummaryResponse summarize(UUID loanId) {
         accessGuard.assertCanAccess(loanService.get(loanId));
 
-        List<RealEstateOwned> items = reo.findByLoanIdOrderByOrdinalAsc(loanId);
+        List<RealEstateOwned> items = reo.findByLoanIdOrderByOrdinalAscIdAsc(loanId);
 
         List<ReoSummaryRow> rows = items.stream().map(r -> new ReoSummaryRow(
                 r.getId(),

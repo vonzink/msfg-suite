@@ -70,6 +70,13 @@ public class ReoService {
             throw new ValidationException("mortgageMonthlyPayment must be >= 0");
     }
 
+    // max+1, not count — count reuses ordinals after a delete and collides
+    private int nextOrdinal(UUID loanId) {
+        return reo.findTopByLoanIdOrderByOrdinalDesc(loanId)
+                .map(x -> x.getOrdinal() + 1)
+                .orElse(0);
+    }
+
     @Transactional
     public RealEstateOwned add(UUID loanId, AddReoRequest req) {
         accessGuard.assertCanAccess(loanService.get(loanId));
@@ -82,7 +89,7 @@ public class ReoService {
         RealEstateOwned r = new RealEstateOwned();
         r.setLoanId(loanId);
         r.setOwnerBorrowerId(req.ownerBorrowerId());
-        r.setOrdinal((int) reo.countByLoanId(loanId));
+        r.setOrdinal(nextOrdinal(loanId));
         r.setSubjectProperty(req.isSubjectProperty() != null && req.isSubjectProperty());
         r.setAddressLine1(req.addressLine1());
         r.setAddressLine2(req.addressLine2());
@@ -106,7 +113,7 @@ public class ReoService {
     @Transactional(readOnly = true)
     public List<RealEstateOwned> list(UUID loanId) {
         accessGuard.assertCanAccess(loanService.get(loanId));
-        return reo.findByLoanIdOrderByOrdinalAsc(loanId);
+        return reo.findByLoanIdOrderByOrdinalAscIdAsc(loanId);
     }
 
     @Transactional

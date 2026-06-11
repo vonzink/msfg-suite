@@ -8,7 +8,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface RealEstateOwnedRepository extends JpaRepository<RealEstateOwned, UUID> {
-    List<RealEstateOwned> findByLoanIdOrderByOrdinalAsc(UUID loanId);
+    List<RealEstateOwned> findByLoanIdOrderByOrdinalAscIdAsc(UUID loanId);
     Optional<RealEstateOwned> findByIdAndOrgId(UUID id, UUID orgId);
-    long countByLoanId(UUID loanId);
+    Optional<RealEstateOwned> findTopByLoanIdOrderByOrdinalDesc(UUID loanId);
 }

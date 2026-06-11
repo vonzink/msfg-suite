@@ -99,7 +99,7 @@ public class LoanCalculationService {
                 : money(pi.add(nz(taxes)).add(nz(hazIns)).add(nz(hoa)).add(nz(mi)));
 
         // ── 8. Net rental income / debt (Fannie 75% convention) ───────────────
-        List<RealEstateOwned> reoRows = reoRepo.findByLoanIdOrderByOrdinalAsc(loanId);
+        List<RealEstateOwned> reoRows = reoRepo.findByLoanIdOrderByOrdinalAscIdAsc(loanId);
         BigDecimal netRentalIncome = BigDecimal.ZERO;
         BigDecimal netRentalDebt   = BigDecimal.ZERO;
         for (RealEstateOwned reo : reoRows) {
