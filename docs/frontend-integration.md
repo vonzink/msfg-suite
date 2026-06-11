@@ -118,13 +118,19 @@ Exact schemas: see `/v3/api-docs`.
   - `POST /api/loans/{loanId}/coc/submit` `{reason (required), dateOfDiscovery?, structureChanges[], feeChanges[]}` → 201 a **PENDING** `CocHistoryEntry`; **clears the draft** (GET draft → empty afterward). Missing `reason` → **400** `VALIDATION_ERROR` with `fields.reason`.
   - `GET /api/loans/{loanId}/coc/history` → entries newest-first (`status`, `submittedAt`, `submittedBy`, `decisionBy`, `decisionDate`).
   - `POST /api/loans/{loanId}/coc/history/{entryId}/decision` `{decision: "ACCEPT"|"DENY"}` → **UNDERWRITER/ADMIN only** (LO → 403); only on a PENDING entry (already-decided → 409). Sets `status` + `decisionBy` + `decisionDate`.
+- **Document Manager** (processing — unblocks the `PreApprovalPage` "Generate" button + invoice uploads)
+  - `POST /api/loans/{loanId}/documents` — **`multipart/form-data`**: `file`, `documentType`, `category?` → 201 `DocumentResponse`. `documentType` is the `DocumentType` enum (`PRE_APPROVAL, INVOICE, APPRAISAL, CREDIT_REPORT, ASSET_STATEMENT, INCOME_DOC, INSURANCE, CONDITION, OTHER`). Empty file → 400; max 25 MB.
+  - `GET /api/loans/{loanId}/documents` — **paginated** (`page`,`size`), optional `?type=PRE_APPROVAL` → `PagedResponse<DocumentResponse>` (`id, documentType, category, fileName, contentType, sizeBytes, generatedOn, requestedBy`), newest-first. These are your **Generated On · Document Type · Requested By** table columns.
+  - `GET /api/loans/{loanId}/documents/{docId}/content` → the **raw file bytes** (`Content-Type` + `Content-Disposition: attachment`) — a binary download, **not** the `ApiResponse` envelope. Use an `<a download>`/blob fetch, not the typed client's JSON unwrap.
+  - `DELETE /api/loans/{loanId}/documents/{docId}` → 204.
+  - `POST /api/loans/{loanId}/documents/pre-approval` → generates + stores an HTML pre-approval letter from the loan, returns the `DocumentResponse` (it then appears in `GET …/documents?type=PRE_APPROVAL`). **This is your disabled "Generate Pre-Approval Letter" button.**
 - **Admin** (platform)
   - `/api/admin/**` — org/tenant provisioning etc. (`PLATFORM_ADMIN` only).
 
 **✅ The full 1003 (URLA) is merged and live** — every screen in your build plan is buildable now (Specs 1–7).
-*Processing-stage modules: **Fees ✅ · Change of Circumstance ✅ shipped.** Coming next (additive): Document Manager →
-Pricing/Lock → AUS → disclosures; plus small deferred bits — Details-of-Transaction/cash-to-close (Spec 6C),
-down-payment-source checkboxes, multi-lien/joint REO. Watch `/v3/api-docs` + `docs/ROADMAP.md`.*
+*Processing-stage modules: **Fees ✅ · Change of Circumstance ✅ · Document Manager ✅ shipped.** Coming next
+(additive): Pricing/Lock → AUS → disclosures; plus small deferred bits — Details-of-Transaction/cash-to-close
+(Spec 6C), down-payment-source checkboxes, multi-lien/joint REO. Watch `/v3/api-docs` + `docs/ROADMAP.md`.*
 
 ## Design inputs (use these)
 The UI is modeled on **UWM EASE**. Rich design material already lives in this repo:
