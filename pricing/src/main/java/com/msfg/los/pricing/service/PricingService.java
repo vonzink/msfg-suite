@@ -1,5 +1,8 @@
 package com.msfg.los.pricing.service;
 
+import com.msfg.los.documents.domain.Document;
+import com.msfg.los.documents.domain.DocumentType;
+import com.msfg.los.documents.service.DocumentService;
 import com.msfg.los.loan.domain.Loan;
 import com.msfg.los.loan.service.LoanAccessGuard;
 import com.msfg.los.loan.service.LoanService;
@@ -25,9 +28,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 
@@ -42,11 +47,14 @@ public class PricingService {
     private final LoanCalculationService calculations;
     private final PricingEnginePort engine;
     private final CurrentUser currentUser;
+    private final DocumentService documentService;
+    private final LockConfirmationGenerator confirmationGenerator;
 
     public PricingService(RateLockRepository locks, PricingAdjustmentRepository adjustments,
                           LockEventRepository events, LoanService loanService,
                           LoanAccessGuard accessGuard, LoanCalculationService calculations,
-                          PricingEnginePort engine, CurrentUser currentUser) {
+                          PricingEnginePort engine, CurrentUser currentUser,
+                          DocumentService documentService, LockConfirmationGenerator confirmationGenerator) {
         this.locks = locks;
         this.adjustments = adjustments;
         this.events = events;
@@ -55,6 +63,8 @@ public class PricingService {
         this.calculations = calculations;
         this.engine = engine;
         this.currentUser = currentUser;
+        this.documentService = documentService;
+        this.confirmationGenerator = confirmationGenerator;
     }
 
     @Transactional(readOnly = true)
@@ -138,6 +148,18 @@ public class PricingService {
         lock.setExtensionDaysTotal(0);
         requoteAndRecord(loan, lock, LockAction.RELOCK);
         return view(loanId);
+    }
+
+    @Transactional
+    public Document generateLockConfirmation(UUID loanId) {
+        Loan loan = loadGuarded(loanId);
+        RateLock lock = requireLockInState(loanId, RateLockStatus.LOCKED, "generate a lock confirmation");
+        var rows = adjustments.findByLoanIdOrderByOrdinalAscIdAsc(loanId);
+        String html = confirmationGenerator.generate(loan, lock, rows);
+        String fileName = "lock-confirmation-" + loan.getLoanNumber() + "-"
+                + DateTimeFormatter.BASIC_ISO_DATE.format(today()) + ".html";
+        return documentService.storeGenerated(loanId, DocumentType.LOCK_CONFIRMATION,
+                "PRICING", fileName, "text/html", html.getBytes(StandardCharsets.UTF_8));
     }
 
     private RateLock requireLockInState(UUID loanId, RateLockStatus required, String action) {

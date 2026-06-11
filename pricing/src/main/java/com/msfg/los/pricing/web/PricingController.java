@@ -1,5 +1,6 @@
 package com.msfg.los.pricing.web;
 
+import com.msfg.los.documents.web.dto.DocumentResponse;
 import com.msfg.los.platform.web.ApiResponse;
 import com.msfg.los.pricing.service.PricingService;
 import com.msfg.los.pricing.web.dto.ExtendLockRequest;
@@ -9,6 +10,8 @@ import com.msfg.los.pricing.web.dto.PricingAdjustmentResponse;
 import com.msfg.los.pricing.web.dto.PricingResponse;
 import com.msfg.los.pricing.web.dto.RateChangeRequest;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -68,5 +71,12 @@ public class PricingController {
     public ApiResponse<PricingResponse> relock(@PathVariable UUID loanId,
                                                @Valid @RequestBody LockTermsRequest req) {
         return ApiResponse.ok(service.relock(loanId, req));
+    }
+
+    @PostMapping("/lock-confirmation")
+    public ResponseEntity<ApiResponse<DocumentResponse>> lockConfirmation(@PathVariable UUID loanId) {
+        var doc = service.generateLockConfirmation(loanId);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.ok(DocumentResponse.from(doc)));
     }
 }
