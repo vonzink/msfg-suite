@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -38,6 +39,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT)
             .body(ApiError.of("CONFLICT", "Conflicting resource state (duplicate or constraint violation)",
                 Map.of(), Instant.now()));
+    }
+
+    // Malformed JSON / invalid enum constant in a request body is a client error (400), not a 500.
+    // Generic message on purpose: parser details can echo request-body fragments (NPI risk).
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiError> handleNotReadable(HttpMessageNotReadableException ex) {
+        return ResponseEntity.badRequest()
+            .body(ApiError.of("VALIDATION_ERROR", "Malformed request body", Map.of(), Instant.now()));
     }
 
     // Catch-all so unexpected failures return our ApiError envelope (not Spring's default /error shape).

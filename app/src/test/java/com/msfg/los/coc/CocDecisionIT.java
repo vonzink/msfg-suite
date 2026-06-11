@@ -126,6 +126,20 @@ class CocDecisionIT extends AbstractIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
+    // --- invalid enum constant in body → 400 VALIDATION_ERROR, not a 500 ---
+
+    @Test
+    void invalidDecisionEnumReturns400ValidationError() throws Exception {
+        String loanId = createLoan();
+        String entryId = submitEntry(loanId);
+
+        mvc.perform(post("/api/loans/{l}/coc/history/{e}/decision", loanId, entryId).with(underwriter())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"decision\":\"ACCEPTED\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
     // --- no token → 401 ---
 
     @Test

@@ -25,4 +25,15 @@ class GlobalExceptionHandlerTest {
         assertThat(resp.getBody().code()).isEqualTo("CONFLICT");
         assertThat(resp.getBody().fields()).isEmpty();
     }
+
+    @Test
+    void mapsHttpMessageNotReadableTo400ValidationError() {
+        ResponseEntity<ApiError> resp = handler.handleNotReadable(
+                new org.springframework.http.converter.HttpMessageNotReadableException(
+                        "JSON parse error", new org.springframework.mock.http.MockHttpInputMessage(new byte[0])));
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(resp.getBody().code()).isEqualTo("VALIDATION_ERROR");
+        assertThat(resp.getBody().message()).isEqualTo("Malformed request body");
+        assertThat(resp.getBody().fields()).isEmpty();
+    }
 }
