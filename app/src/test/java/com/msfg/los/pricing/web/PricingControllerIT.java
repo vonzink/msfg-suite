@@ -96,4 +96,164 @@ class PricingControllerIT extends AbstractIntegrationTest {
         mvc.perform(get("/api/loans/{id}/pricing", UUID.randomUUID()).with(lo()))
                 .andExpect(status().isNotFound());
     }
+
+    // ── Control-your-price (lock) ─────────────────────────────────────────────
+
+    String cypBody() {
+        return """
+                {"rate": 6.5, "commitmentDays": 30, "compensationPayerType": "LENDER_PAID"}
+                """;
+    }
+
+    @Test
+    void controlYourPrice_locksLoan_persistsGoldenAdjustments_andAppendsEvent() throws Exception {
+        String loanId = priceableLoan();
+
+        mvc.perform(post("/api/loans/{id}/pricing/lock/control-your-price", loanId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON).content(cypBody()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.lockStatus").value("LOCKED"))
+                .andExpect(jsonPath("$.data.interestRate").value(6.5))
+                .andExpect(jsonPath("$.data.commitmentDays").value(30))
+                .andExpect(jsonPath("$.data.extensionDaysTotal").value(0))
+                .andExpect(jsonPath("$.data.compensationPayerType").value("LENDER_PAID"))
+                .andExpect(jsonPath("$.data.lockedBy").value(LO))
+                .andExpect(jsonPath("$.data.interviewerEmail").value("lo@msfg.test"))
+                .andExpect(jsonPath("$.data.lockDate").exists())
+                .andExpect(jsonPath("$.data.currentExpiration").exists());
+
+        mvc.perform(get("/api/loans/{id}/pricing/adjustments", loanId).with(lo()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(6))
+                .andExpect(jsonPath("$.data[0].name").value("Base Price"))
+                .andExpect(jsonPath("$.data[0].rowType").value("BASE"))
+                .andExpect(jsonPath("$.data[0].adjustmentPercent").value(-0.375))
+                .andExpect(jsonPath("$.data[0].dollarAmount").value(-1125.00))
+                .andExpect(jsonPath("$.data[1].name").value("FICO/LTV Adjustment"))
+                .andExpect(jsonPath("$.data[1].adjustmentPercent").value(0.500))
+                .andExpect(jsonPath("$.data[1].dollarAmount").value(1500.00))
+                .andExpect(jsonPath("$.data[3].name").value("Final Price"))
+                .andExpect(jsonPath("$.data[3].adjustmentPercent").value(0.125))
+                .andExpect(jsonPath("$.data[3].dollarAmount").value(375.00))
+                .andExpect(jsonPath("$.data[5].name").value("Final Price After Compensation"))
+                .andExpect(jsonPath("$.data[5].dollarAmount").value(3375.00));
+
+        mvc.perform(get("/api/loans/{id}/pricing/lock/history", loanId).with(lo()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].action").value("CONTROL_YOUR_PRICE"))
+                .andExpect(jsonPath("$.data[0].actor").value(LO))
+                .andExpect(jsonPath("$.data[0].rate").value(6.5));
+    }
+
+    @Test
+    void controlYourPrice_repriceWhileLocked_replacesAdjustments_secondEvent() throws Exception {
+        String loanId = priceableLoan();
+        mvc.perform(post("/api/loans/{id}/pricing/lock/control-your-price", loanId).with(lo())
+                .contentType(MediaType.APPLICATION_JSON).content(cypBody())).andExpect(status().isOk());
+
+        mvc.perform(post("/api/loans/{id}/pricing/lock/control-your-price", loanId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"rate\": 7.0, \"commitmentDays\": 15, \"compensationPayerType\": \"BORROWER_PAID\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.interestRate").value(7.0))
+                .andExpect(jsonPath("$.data.commitmentDays").value(15));
+
+        // Re-quote replaced (still 6 rows, not 12); rate 7.0/15d: Base = -0-0 = 0.000
+        mvc.perform(get("/api/loans/{id}/pricing/adjustments", loanId).with(lo()))
+                .andExpect(jsonPath("$.data.length()").value(6))
+                .andExpect(jsonPath("$.data[0].adjustmentPercent").value(0.000));
+
+        mvc.perform(get("/api/loans/{id}/pricing/lock/history", loanId).with(lo()))
+                .andExpect(jsonPath("$.data.length()").value(2));
+    }
+
+    @Test
+    void getPricing_onBareLoan_returnsNotLockedWithNulls() throws Exception {
+        String loanId = createLoan();   // never patched — the FE's literal first page-load
+        mvc.perform(get("/api/loans/{id}/pricing", loanId).with(lo()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.lockStatus").value("NOT_LOCKED"))
+                .andExpect(jsonPath("$.data.interestRate").doesNotExist())
+                .andExpect(jsonPath("$.data.totalLoanAmount").doesNotExist())
+                .andExpect(jsonPath("$.data.exactRateType").doesNotExist());
+    }
+
+    // ── Validation: one test per rule branch (assert $.fields.<name>) ─────────
+
+    @Test
+    void cyp_missingRate_400() throws Exception {
+        String loanId = priceableLoan();
+        mvc.perform(post("/api/loans/{id}/pricing/lock/control-your-price", loanId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"commitmentDays\": 30, \"compensationPayerType\": \"LENDER_PAID\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fields.rate").exists());
+    }
+
+    @Test
+    void cyp_rateTooLow_400() throws Exception {
+        String loanId = priceableLoan();
+        mvc.perform(post("/api/loans/{id}/pricing/lock/control-your-price", loanId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"rate\": 0.05, \"commitmentDays\": 30, \"compensationPayerType\": \"LENDER_PAID\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fields.rate").exists());
+    }
+
+    @Test
+    void cyp_missingCommitmentDays_400() throws Exception {
+        String loanId = priceableLoan();
+        mvc.perform(post("/api/loans/{id}/pricing/lock/control-your-price", loanId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"rate\": 6.5, \"compensationPayerType\": \"LENDER_PAID\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fields.commitmentDays").exists());
+    }
+
+    @Test
+    void cyp_disallowedCommitmentDays_400() throws Exception {
+        String loanId = priceableLoan();
+        mvc.perform(post("/api/loans/{id}/pricing/lock/control-your-price", loanId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"rate\": 6.5, \"commitmentDays\": 17, \"compensationPayerType\": \"LENDER_PAID\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fields.commitmentDays").exists());
+    }
+
+    @Test
+    void cyp_missingCompensationPayerType_400() throws Exception {
+        String loanId = priceableLoan();
+        mvc.perform(post("/api/loans/{id}/pricing/lock/control-your-price", loanId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"rate\": 6.5, \"commitmentDays\": 30}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fields.compensationPayerType").exists());
+    }
+
+    // ── Domain conflicts ──────────────────────────────────────────────────────
+
+    @Test
+    void cyp_loanWithoutBaseAmount_409_LOAN_NOT_PRICEABLE() throws Exception {
+        String loanId = createLoan();   // no baseLoanAmount patched
+        mvc.perform(post("/api/loans/{id}/pricing/lock/control-your-price", loanId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON).content(cypBody()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("LOAN_NOT_PRICEABLE"));
+    }
+
+    @Test
+    void cyp_terminalLoan_409() throws Exception {
+        String loanId = priceableLoan();
+        // STARTED -> CANCELLED is legal in one hop (any non-terminal status may cancel, no role gate).
+        // Body key is targetStatus per loan-core's TransitionRequest record.
+        mvc.perform(post("/api/loans/{id}/status", loanId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"targetStatus\":\"CANCELLED\",\"reason\":\"test\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/loans/{id}/pricing/lock/control-your-price", loanId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON).content(cypBody()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("LOCK_STATE_CONFLICT"));
+    }
 }

@@ -18,6 +18,14 @@ public class CurrentUser {
         }
         return Optional.empty();
     }
+    public Optional<String> email() {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth instanceof JwtAuthenticationToken jwt) {
+            Jwt token = jwt.getToken();
+            return Optional.ofNullable(token.getClaimAsString("email"));
+        }
+        return Optional.empty();
+    }
     public Set<String> roles() {
         var auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null) return Set.of();
