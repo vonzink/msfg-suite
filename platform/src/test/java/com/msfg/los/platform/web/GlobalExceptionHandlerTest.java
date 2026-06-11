@@ -25,4 +25,13 @@ class GlobalExceptionHandlerTest {
         assertThat(resp.getBody().code()).isEqualTo("CONFLICT");
         assertThat(resp.getBody().fields()).isEmpty();
     }
+
+    @Test
+    void mapsOptimisticLockingFailureTo409Conflict() {
+        ResponseEntity<ApiError> resp = handler.handleOptimisticLock(
+                new org.springframework.dao.OptimisticLockingFailureException("x"));
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(resp.getBody().code()).isEqualTo("CONFLICT");
+        assertThat(resp.getBody().fields()).isEmpty();
+    }
 }

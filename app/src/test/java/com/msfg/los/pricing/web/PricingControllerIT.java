@@ -162,6 +162,7 @@ class PricingControllerIT extends AbstractIntegrationTest {
         // Re-quote replaced (still 6 rows, not 12); rate 7.0/15d: Base = -0-0 = 0.000
         mvc.perform(get("/api/loans/{id}/pricing/adjustments", loanId).with(lo()))
                 .andExpect(jsonPath("$.data.length()").value(6))
+                .andExpect(jsonPath("$.data[0].ordinal").value(1))
                 .andExpect(jsonPath("$.data[0].adjustmentPercent").value(0.000));
 
         mvc.perform(get("/api/loans/{id}/pricing/lock/history", loanId).with(lo()))

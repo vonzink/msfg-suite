@@ -4,6 +4,7 @@ import com.msfg.los.platform.error.DomainException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -37,6 +38,16 @@ public class GlobalExceptionHandler {
         log.warn("Data integrity violation: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.CONFLICT)
             .body(ApiError.of("CONFLICT", "Conflicting resource state (duplicate or constraint violation)",
+                Map.of(), Instant.now()));
+    }
+
+    // @Version conflicts (e.g. two concurrent updates to the same rate_lock row) surface as
+    // OptimisticLockingFailureException — same race class as above: the conflict answer is 409, not 500.
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<ApiError> handleOptimisticLock(OptimisticLockingFailureException ex) {
+        log.warn("Optimistic locking failure: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(ApiError.of("CONFLICT", "Concurrent modification — retry",
                 Map.of(), Instant.now()));
     }
 
