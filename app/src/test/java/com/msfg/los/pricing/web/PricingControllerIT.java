@@ -257,4 +257,28 @@ class PricingControllerIT extends AbstractIntegrationTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("LOCK_STATE_CONFLICT"));
     }
+
+    // ── Cross-tenant isolation ────────────────────────────────────────────────
+
+    @Test
+    void crossTenant_foreignOrgJwt_getsNotFoundOnReadsAndActions() throws Exception {
+        String loanId = priceableLoan();
+        mvc.perform(post("/api/loans/{id}/pricing/lock/control-your-price", loanId).with(lo())
+                .contentType(MediaType.APPLICATION_JSON).content(cypBody())).andExpect(status().isOk());
+
+        RequestPostProcessor foreign = jwt()
+                .jwt(j -> j.subject(UUID.randomUUID().toString())
+                        .claim("org_id", "00000000-0000-0000-0000-0000000000bb"))
+                .authorities(new SimpleGrantedAuthority("ROLE_LO"));
+
+        mvc.perform(get("/api/loans/{id}/pricing", loanId).with(foreign))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/loans/{id}/pricing/adjustments", loanId).with(foreign))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/loans/{id}/pricing/lock/history", loanId).with(foreign))
+                .andExpect(status().isNotFound());
+        mvc.perform(post("/api/loans/{id}/pricing/lock/extend", loanId).with(foreign)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"additionalDays\": 15}"))
+                .andExpect(status().isNotFound());
+    }
 }
