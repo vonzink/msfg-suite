@@ -27,9 +27,12 @@ class CocDecisionIT extends AbstractIntegrationTest {
                 .authorities(new SimpleGrantedAuthority("ROLE_LO"));
     }
 
-    // Same sub as LO (same person, same org), different role — mirrors LoanControllerIT pattern
+    // A real underwriter: DIFFERENT subject than the LO, same org. Before the 2026-06-11
+    // role-access spec this was impossible (guard 403'd non-owners before the role gate).
+    static final String UW = UUID.randomUUID().toString();
+
     private RequestPostProcessor underwriter() {
-        return jwt().jwt(j -> j.subject(LO).claim("org_id", DEFAULT_ORG))
+        return jwt().jwt(j -> j.subject(UW).claim("org_id", DEFAULT_ORG))
                 .authorities(new SimpleGrantedAuthority("ROLE_UNDERWRITER"));
     }
 
@@ -74,7 +77,7 @@ class CocDecisionIT extends AbstractIntegrationTest {
                         .content("{\"decision\":\"ACCEPT\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("ACCEPTED"))
-                .andExpect(jsonPath("$.data.decisionBy").value(notNullValue()))
+                .andExpect(jsonPath("$.data.decisionBy").value(UW))
                 .andExpect(jsonPath("$.data.decisionDate").value(notNullValue()));
     }
 

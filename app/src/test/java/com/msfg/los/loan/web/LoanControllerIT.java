@@ -180,11 +180,11 @@ class LoanControllerIT extends AbstractIntegrationTest {
                 .content("{\"targetStatus\":\"IN_UNDERWRITING\",\"reason\":\"uw\"}"))
             .andExpect(status().isOk());
 
-        // Now query transitions AS an underwriter (same sub as LO, same org — passes access guard)
+        // Now query transitions AS an underwriter — a DIFFERENT org member, allowed in via
+        // org-wide back-office access (2026-06-11 role-access spec).
         // The underwriter role causes lifecycle.allowedTransitions to include the gated targets.
         mvc.perform(get("/api/loans/{id}/status/transitions", id)
-                .with(jwt().jwt(j -> j.subject(LO).claim("org_id", DEFAULT_ORG))
-                           .authorities(new SimpleGrantedAuthority("ROLE_UNDERWRITER"))))
+                .with(user(UUID.randomUUID().toString(), "ROLE_UNDERWRITER")))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.currentStatus").value("IN_UNDERWRITING"))
             .andExpect(jsonPath("$.data.allowedTransitions", hasItem("APPROVED_WITH_CONDITIONS")))
