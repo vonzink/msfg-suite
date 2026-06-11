@@ -154,6 +154,18 @@ class FeeControllerIT extends AbstractIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
+    // --- missing section → 400 ---
+
+    @Test
+    void missingSectionReturns400() throws Exception {
+        String loanId = createLoan();
+
+        mvc.perform(post("/api/loans/{l}/fees", loanId).with(lo())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"label\":\"X\",\"amount\":10}"))
+                .andExpect(status().isBadRequest());
+    }
+
     // --- no token → 401 ---
 
     @Test

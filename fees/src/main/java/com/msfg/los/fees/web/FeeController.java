@@ -7,6 +7,7 @@ import com.msfg.los.fees.web.dto.FeeLineItemResponse;
 import com.msfg.los.fees.web.dto.FeeTotalsResponse;
 import com.msfg.los.fees.web.dto.UpdateFeeRequest;
 import com.msfg.los.platform.web.ApiResponse;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -29,7 +30,7 @@ public class FeeController {
     @PostMapping
     public ResponseEntity<ApiResponse<FeeLineItemResponse>> add(
             @PathVariable UUID loanId,
-            @RequestBody AddFeeRequest req) {
+            @Valid @RequestBody AddFeeRequest req) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok(FeeLineItemResponse.from(service.add(loanId, req))));
     }
