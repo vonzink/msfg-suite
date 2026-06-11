@@ -13,6 +13,24 @@ webhooks) so the backend is a cloud-agnostic Docker image. MSFG is tenant #1.
 
 ---
 
+## 📍 Current status (2026-06-10) — 12 modules, migrations through **V13**, **252 tests**, all on `main`
+
+**The full 1003 (URLA) is complete** (Milestones 0–1 below, Specs 1–7). Since then, backend has been built to
+match the **already-shipped frontend** (separate repo `msfg-suite-web`, parallel session), driven by its work-order
+(`msfg-suite-web/docs/HANDOFF-BACKEND-REQUESTS.md`) rather than strictly in the milestone order below — so a few
+Milestone-2/3 items have **shipped early as frontend-driven slices** (the fuller compliance scope in those
+milestones remains future):
+- ✅ **Contract-nits (FE §3)** — `e5d9efc`. LoanSummary +6 fields; pipeline rows enriched (`PrimaryBorrowerNameResolver` port); `loanOfficerId`→principal; role-aware `GET /loans/{id}/status/transitions`.
+- ✅ **Fees (FE §1)** — `fb79ba0` (+ Zack's reconcile `2223d35`). New `fees` module (V11): line items (id-CRUD **+ PUT-upsert by section,label**, negatives allowed), server-computed totals (`escrowPrepaids=F+G`), invoice upsert. *(The Milestone-3 "Products & Pricing / Rate Lock — Fee" line is the pricing-side fee scope; this is the LE/CD fee ledger.)*
+- ✅ **Change of Circumstance — basic workflow (FE §2)** — `e5cd3b6`. New `coc` module (V12): jsonb draft → submit→PENDING history → UNDERWRITER ACCEPT/DENY. *(The Milestone-3 "Change of Circumstance" row below = the full **TRID fee-tolerance / re-disclosure-clock engine** — still future; this shipped the draft/submit/decision UI contract only.)*
+- ✅ **Document Manager — core (Milestone 2)** — `6873ebc`. New `documents` module (V13): multipart upload / paginated list / **binary download** / delete + **pre-approval HTML letter**, storage behind `DocumentStoragePort` (DB-bytea stub, S3 later). *(Still future: real S3 adapter, PDF rendering, conditions/e-sign/expiring-docs, 3.4 export.)*
+
+**▶ NEXT: Products & Pricing / Rate Lock** (Milestone 3 below) → then **AUS** (Milestone 2). Next migration is **V14**.
+Per-merge protocol: additive only; update `docs/frontend-integration.md`; append to the FE handoff; restart the
+local backend so the FE can `gen:api`. Keep `/v3/api-docs` healthy (`OpenApiDocsIT`); opus-review money/security specs.
+
+---
+
 ## ✅ Milestone 0 — Foundation (DONE, merged `f2437ad`)
 Spec 1: Core loan spine — Loan aggregate, lifecycle state machine, pipeline, loan-scoped access,
 borrowers, NPI crypto, Cognito security. `platform · app · loan-core · parties`. 37 tests.
