@@ -26,6 +26,7 @@ dependencies {
     implementation(project(":documents"))
     implementation(project(":pricing"))
     implementation(project(":aus"))
+    implementation(project(":contacts"))
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-security")
