@@ -89,6 +89,21 @@ class StubCreditVendorAdapterTest {
         assertThat(adapter.order(reissue).creditReportIdentifier()).isEqualTo("XS-EXISTING1");
     }
 
+    // Borrower names are user input — they must land in the report as text, never live markup.
+    @Test
+    void reportEscapesHtmlInBorrowerNames() {
+        CreditVendorRequest hostile = new CreditVendorRequest(loanId, "1", CreditOrderAction.SUBMIT,
+                CreditRequestType.JOINT, true, true, true,
+                List.of(new CreditBorrower(borrower1, "<script>alert(1)</script>", "O'Brien & Sons")),
+                null);
+
+        String body = new String(adapter.order(hostile).report().bytes(), StandardCharsets.UTF_8);
+
+        assertThat(body).contains("&lt;script&gt;alert(1)&lt;/script&gt;");
+        assertThat(body).contains("O&#39;Brien &amp; Sons");
+        assertThat(body).doesNotContain("<script>");
+    }
+
     @Test
     void reportArtifact() {
         CreditVendorResult result = adapter.order(tripleMergeSubmit());

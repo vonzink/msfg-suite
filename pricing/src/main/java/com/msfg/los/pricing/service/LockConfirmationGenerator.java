@@ -1,5 +1,6 @@
 package com.msfg.los.pricing.service;
 
+import com.msfg.los.documents.service.HtmlText;
 import com.msfg.los.loan.domain.Loan;
 import com.msfg.los.pricing.domain.PricingAdjustment;
 import com.msfg.los.pricing.domain.RateLock;
@@ -16,7 +17,7 @@ public class LockConfirmationGenerator {
     public String generate(Loan loan, RateLock lock, List<PricingAdjustment> adjustments) {
         StringBuilder rows = new StringBuilder();
         for (PricingAdjustment a : adjustments) {
-            rows.append("<tr><td>").append(a.getName())
+            rows.append("<tr><td>").append(HtmlText.escape(a.getName()))
                 .append("</td><td style=\"text-align:right\">").append(a.getAdjustmentPercent())
                 .append("</td><td style=\"text-align:right\">").append(a.getDollarAmount())
                 .append("</td></tr>");
@@ -45,7 +46,7 @@ public class LockConfirmationGenerator {
                 loan.getLoanNumber(), product,
                 lock.getLockedRate(), lock.getCommitmentDays(), lock.getLockDate(),
                 lock.getExpirationDate(), lock.getCompensationPayerType(),
-                lock.getLockedBy() == null ? "" : lock.getLockedBy(),
+                HtmlText.escape(lock.getLockedBy()),
                 rows, LocalDate.now(ZoneOffset.UTC));
     }
 }

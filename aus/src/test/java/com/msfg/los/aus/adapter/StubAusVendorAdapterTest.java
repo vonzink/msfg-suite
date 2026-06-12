@@ -149,6 +149,23 @@ class StubAusVendorAdapterTest {
         assertThat(new String(xml.bytes(), StandardCharsets.UTF_8)).contains("<Recommendation>");
     }
 
+    // The credit provider code is user input carried into the findings wiring summary —
+    // it must land as text, never live markup.
+    @Test
+    void findingsEscapeHtmlInCreditProviderCode() {
+        ResolvedCredentials credentials = new ResolvedCredentials(CredentialSource.ORG,
+                "INST-1", null, null, null, "user", "pass", null, null, null, null);
+        AusSubmission hostile = new AusSubmission(AusVendor.DU, UUID.randomUUID(), null, credentials,
+                new CreditWiring("<img src=x onerror=alert(1)>", null, List.of()), completeFile());
+
+        VendorArtifact html = adapter.submit(hostile).artifacts().stream()
+                .filter(a -> a.name().equals("findings.html")).findFirst().orElseThrow();
+        String body = new String(html.bytes(), StandardCharsets.UTF_8);
+
+        assertThat(body).contains("&lt;img src=x onerror=alert(1)&gt;");
+        assertThat(body).doesNotContain("<img");
+    }
+
     @Test
     void lpaTransactionIdPresent() {
         UUID loanId = UUID.randomUUID();

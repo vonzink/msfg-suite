@@ -7,6 +7,7 @@ import com.msfg.los.aus.service.CreditVendorPort;
 import com.msfg.los.aus.service.CreditVendorRequest;
 import com.msfg.los.aus.service.CreditVendorResult;
 import com.msfg.los.aus.service.VendorArtifact;
+import com.msfg.los.documents.service.HtmlText;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -74,7 +75,8 @@ public class StubCreditVendorAdapter implements CreditVendorPort {
     private VendorArtifact reportHtml(CreditVendorRequest request, List<CreditScoreEntry> scores) {
         StringBuilder borrowerItems = new StringBuilder();
         for (CreditBorrower borrower : request.borrowers()) {
-            borrowerItems.append("<li>%s %s</li>".formatted(borrower.firstName(), borrower.lastName()));
+            borrowerItems.append("<li>%s %s</li>".formatted(
+                    HtmlText.escape(borrower.firstName()), HtmlText.escape(borrower.lastName())));
         }
         StringBuilder scoreRows = new StringBuilder();
         for (CreditScoreEntry entry : scores) {

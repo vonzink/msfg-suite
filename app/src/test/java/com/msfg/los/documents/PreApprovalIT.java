@@ -104,6 +104,28 @@ class PreApprovalIT extends AbstractIntegrationTest {
         assertThat(html).contains(loanNumber);
     }
 
+    // --- borrower-name markup is escaped in the letter (opus AUS-review M1 pin) ---
+
+    @Test
+    void preApprovalEscapesHtmlInBorrowerName() throws Exception {
+        var loanInfo = createLoanWithNumber();
+        String loanId = loanInfo[0];
+        addPrimaryBorrower(loanId, "<script>alert(1)</script>", "Smith");
+
+        var createRes = mvc.perform(post("/api/loans/{l}/documents/pre-approval", loanId).with(lo()))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String docId = com.jayway.jsonpath.JsonPath.read(createRes.getResponse().getContentAsString(), "$.data.id");
+
+        var downloadRes = mvc.perform(get("/api/loans/{l}/documents/{d}/content", loanId, docId).with(lo()))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String html = downloadRes.getResponse().getContentAsString();
+        assertThat(html).contains("&lt;script&gt;alert(1)&lt;/script&gt;");
+        assertThat(html).doesNotContain("<script>alert(1)</script>");
+    }
+
     // --- requestedBy == caller subject ---
 
     @Test

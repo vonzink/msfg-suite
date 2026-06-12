@@ -84,6 +84,7 @@ public class PreApprovalLetterGenerator {
                   </div>
                 </body>
                 </html>
-                """.formatted(loanNumber, loanNumber, borrowerDisplay, formattedAmount, propertyLocation, loanNumber);
+                """.formatted(loanNumber, loanNumber, HtmlText.escape(borrowerDisplay),
+                formattedAmount, HtmlText.escape(propertyLocation), loanNumber);
     }
 }

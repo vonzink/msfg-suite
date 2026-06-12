@@ -8,6 +8,7 @@ import com.msfg.los.aus.service.AusVendorPort;
 import com.msfg.los.aus.service.AusVendorResult;
 import com.msfg.los.aus.service.CreditWiring;
 import com.msfg.los.aus.service.VendorArtifact;
+import com.msfg.los.documents.service.HtmlText;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -150,7 +151,9 @@ public class StubAusVendorAdapter implements AusVendorPort {
         if (wiring == null) {
             return "none";
         }
-        String provider = wiring.creditProviderCode() != null ? wiring.creditProviderCode() : "none";
+        String provider = wiring.creditProviderCode() != null
+                ? HtmlText.escape(wiring.creditProviderCode())
+                : "none";
         int wired = wiring.perBorrower() != null ? wiring.perBorrower().size() : 0;
         return "provider=" + provider + ", borrowers wired=" + wired;
     }

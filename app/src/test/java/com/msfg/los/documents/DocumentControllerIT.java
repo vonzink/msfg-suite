@@ -100,6 +100,7 @@ class DocumentControllerIT extends AbstractIntegrationTest {
         var downloadRes = mvc.perform(get("/api/loans/{l}/documents/{d}/content", loanId, docId).with(lo()))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Disposition", containsString("inv.pdf")))
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"))
                 .andReturn();
 
         assertThat(downloadRes.getResponse().getContentAsByteArray()).isEqualTo(payload);
