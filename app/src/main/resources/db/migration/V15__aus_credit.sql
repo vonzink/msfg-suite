@@ -2,7 +2,7 @@
 
 CREATE TABLE vendor_credential (
     id                      uuid PRIMARY KEY,
-    org_id                  uuid NOT NULL,
+    org_id                  uuid NOT NULL REFERENCES organization(id),
     loan_id                 uuid NULL,            -- NULL = org default; non-null = per-loan override
     vendor                  varchar(20) NOT NULL, -- DU | LPA | CREDIT
     institution_id          varchar(80),
@@ -25,7 +25,7 @@ CREATE INDEX idx_vendor_credential_org_loan ON vendor_credential (org_id, loan_i
 
 CREATE TABLE aus_profile (
     id           uuid PRIMARY KEY,
-    org_id       uuid NOT NULL,
+    org_id       uuid NOT NULL REFERENCES organization(id),
     loan_id      uuid NOT NULL,
     du_settings  jsonb NOT NULL DEFAULT '{}',
     lpa_settings jsonb NOT NULL DEFAULT '{}',
@@ -37,7 +37,7 @@ CREATE TABLE aus_profile (
 
 CREATE TABLE credit_order (
     id                        uuid PRIMARY KEY,
-    org_id                    uuid NOT NULL,
+    org_id                    uuid NOT NULL REFERENCES organization(id),
     loan_id                   uuid NOT NULL,
     provider_code             varchar(40),
     action                    varchar(20) NOT NULL,  -- SUBMIT|FORCE_NEW|REISSUE|UPGRADE
@@ -61,7 +61,7 @@ CREATE INDEX idx_credit_order_org_loan ON credit_order (org_id, loan_id, request
 
 CREATE TABLE aus_run (
     id                        uuid PRIMARY KEY,
-    org_id                    uuid NOT NULL,
+    org_id                    uuid NOT NULL REFERENCES organization(id),
     loan_id                   uuid NOT NULL,
     vendor                    varchar(10) NOT NULL,  -- DU|LPA
     status                    varchar(20) NOT NULL,
