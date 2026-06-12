@@ -4,6 +4,7 @@ import com.msfg.los.aus.domain.CredentialVendor;
 import com.msfg.los.aus.domain.CreditOrder;
 import com.msfg.los.aus.domain.CreditOrderAction;
 import com.msfg.los.aus.domain.CreditOrderStatus;
+import com.msfg.los.aus.domain.CreditRequestType;
 import com.msfg.los.aus.repo.AusProfileRepository;
 import com.msfg.los.aus.repo.CreditOrderRepository;
 import com.msfg.los.aus.web.dto.CreditOrderRequest;
@@ -103,15 +104,42 @@ public class CreditOrderService {
         boolean experian = req.experian() == null || req.experian();
         boolean transUnion = req.transUnion() == null || req.transUnion();
 
-        String providerCode = resolveProviderCode(loanId);
-        List<CreditBorrower> creditBorrowers = req.borrowerIds().stream()
+        List<BorrowerParty> selected = req.borrowerIds().stream()
                 .map(loanBorrowers::get)
+                .toList();
+        CreditOrder order = execute(loanId, resolveProviderCode(loanId), req.action(), req.requestType(),
+                equifax, experian, transUnion, selected, req.creditReportIdentifier());
+        return toResponse(order);
+    }
+
+    /**
+     * Internal ORDER-mode seam for {@code AusRunService} — called AFTER the caller has already run
+     * the loan access guard. Orders for ALL loan borrowers (JOINT if more than one, else
+     * INDIVIDUAL), all three bureaus, action SUBMIT — persisting a normal credit_order history row
+     * + stored report artifact exactly like {@link #order} — and returns the vendor-assigned
+     * creditReportIdentifier.
+     */
+    @Transactional
+    public String orderForAusRun(UUID loanId, String providerCode) {
+        List<BorrowerParty> all = borrowers.findByLoanIdOrderByOrdinalAsc(loanId);
+        CreditRequestType requestType = all.size() > 1
+                ? CreditRequestType.JOINT : CreditRequestType.INDIVIDUAL;
+        return execute(loanId, providerCode, CreditOrderAction.SUBMIT, requestType,
+                true, true, true, all, null).getCreditReportIdentifier();
+    }
+
+    /** Shared pipeline: vendor call → stored report artifact → persisted history row. */
+    private CreditOrder execute(UUID loanId, String providerCode, CreditOrderAction action,
+                                CreditRequestType requestType, boolean equifax, boolean experian,
+                                boolean transUnion, List<BorrowerParty> selectedBorrowers,
+                                String reissueIdentifier) {
+        List<CreditBorrower> creditBorrowers = selectedBorrowers.stream()
                 .map(b -> new CreditBorrower(b.getId(), b.getFirstName(), b.getLastName()))
                 .toList();
 
         CreditVendorResult result = creditVendor.order(new CreditVendorRequest(
-                loanId, providerCode, req.action(), req.requestType(),
-                equifax, experian, transUnion, creditBorrowers, req.creditReportIdentifier()));
+                loanId, providerCode, action, requestType,
+                equifax, experian, transUnion, creditBorrowers, reissueIdentifier));
 
         VendorArtifact report = result.report();
         Document reportDoc = documentService.storeGenerated(loanId, DocumentType.CREDIT_REPORT, "credit",
@@ -121,19 +149,19 @@ public class CreditOrderService {
         CreditOrder order = new CreditOrder();
         order.setLoanId(loanId);
         order.setProviderCode(providerCode);
-        order.setAction(req.action());
-        order.setRequestType(req.requestType());
+        order.setAction(action);
+        order.setRequestType(requestType);
         order.setEquifax(equifax);
         order.setExperian(experian);
         order.setTransUnion(transUnion);
-        order.setBorrowerIds(new ArrayList<>(req.borrowerIds()));
+        order.setBorrowerIds(new ArrayList<>(selectedBorrowers.stream().map(BorrowerParty::getId).toList()));
         order.setStatus(CreditOrderStatus.COMPLETE);
         order.setCreditReportIdentifier(result.creditReportIdentifier());
         order.setScores(result.scores());
         order.setReportDocumentId(reportDoc.getId());
         order.setRequestedBy(currentUser.id().orElse(null));
         order.setRequestedAt(Instant.now());
-        return toResponse(orders.save(order));
+        return orders.save(order);
     }
 
     @Transactional(readOnly = true)
