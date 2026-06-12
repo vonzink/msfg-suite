@@ -1,10 +1,13 @@
 package com.msfg.los.aus.service;
 
+import com.msfg.los.aus.domain.CredentialSource;
 import com.msfg.los.aus.domain.CredentialVendor;
 import com.msfg.los.aus.domain.VendorCredential;
 import com.msfg.los.aus.repo.VendorCredentialRepository;
 import com.msfg.los.aus.web.dto.UpsertVendorCredentialRequest;
 import com.msfg.los.aus.web.dto.VendorCredentialResponse;
+import com.msfg.los.loan.service.LoanAccessGuard;
+import com.msfg.los.loan.service.LoanService;
 import com.msfg.los.platform.error.NotFoundException;
 import com.msfg.los.platform.tenancy.TenantContext;
 import org.springframework.stereotype.Service;
@@ -14,23 +17,35 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Org-wide vendor credentials (loanId NULL rows). Secrets are AES-GCM-encrypted at rest by the
- * entity's {@code EncryptedStringConverter} columns and are NEVER returned: responses carry only
- * set-booleans and a masked username — raw values have no field to ride out on.
+ * Vendor credentials: org-wide defaults (loanId NULL rows) + per-loan overrides (loanId set).
+ * Secrets are AES-GCM-encrypted at rest by the entity's {@code EncryptedStringConverter} columns
+ * and are NEVER returned: responses carry only set-booleans and a masked username — raw values
+ * have no field to ride out on.
  */
 @Service
 public class VendorCredentialService {
 
     private final VendorCredentialRepository credentials;
+    private final LoanService loanService;
+    private final LoanAccessGuard accessGuard;
     private final TenantContext tenantContext;
 
-    public VendorCredentialService(VendorCredentialRepository credentials, TenantContext tenantContext) {
+    public VendorCredentialService(VendorCredentialRepository credentials,
+                                   LoanService loanService,
+                                   LoanAccessGuard accessGuard,
+                                   TenantContext tenantContext) {
         this.credentials = credentials;
+        this.loanService = loanService;
+        this.accessGuard = accessGuard;
         this.tenantContext = tenantContext;
     }
 
     private UUID org() {
         return tenantContext.orgId().orElseThrow(() -> new NotFoundException("Tenant", "current"));
+    }
+
+    private void guard(UUID loanId) {
+        accessGuard.assertCanAccess(loanService.get(loanId));
     }
 
     @Transactional
@@ -42,7 +57,75 @@ public class VendorCredentialService {
                     c.setLoanId(null);
                     return c;
                 });
+        apply(cred, req);
+        return toResponse(credentials.save(cred));
+    }
 
+    @Transactional(readOnly = true)
+    public List<VendorCredentialResponse> listOrg() {
+        return credentials.findByOrgIdAndLoanIdIsNull(org()).stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Transactional
+    public VendorCredentialResponse upsertLoan(UUID loanId, CredentialVendor vendor, UpsertVendorCredentialRequest req) {
+        guard(loanId);
+        VendorCredential cred = credentials.findByOrgIdAndVendorAndLoanId(org(), vendor, loanId)
+                .orElseGet(() -> {
+                    VendorCredential c = new VendorCredential();
+                    c.setVendor(vendor);
+                    c.setLoanId(loanId);
+                    return c;
+                });
+        apply(cred, req);
+        return toResponse(credentials.save(cred));
+    }
+
+    @Transactional(readOnly = true)
+    public List<VendorCredentialResponse> listLoan(UUID loanId) {
+        guard(loanId);
+        return credentials.findByOrgIdAndLoanId(org(), loanId).stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Transactional
+    public void deleteLoan(UUID loanId, CredentialVendor vendor) {
+        guard(loanId);
+        VendorCredential cred = credentials.findByOrgIdAndVendorAndLoanId(org(), vendor, loanId)
+                .orElseThrow(() -> new NotFoundException("VendorCredential", vendor.name()));
+        credentials.delete(cred);
+    }
+
+    /**
+     * Whole-row resolution: the loan override row wins outright, else the org row, else NONE.
+     * No per-field merging — every field (including nulls) comes from the single chosen row.
+     *
+     * <p>Internal seam for vendor adapters: returns plaintext secrets and performs NO
+     * authorization itself — callers MUST have already run the loan access guard.
+     */
+    @Transactional(readOnly = true)
+    public ResolvedCredentials resolve(UUID loanId, CredentialVendor vendor) {
+        return credentials.findByOrgIdAndVendorAndLoanId(org(), vendor, loanId)
+                .or(() -> credentials.findByOrgIdAndVendorAndLoanIdIsNull(org(), vendor))
+                .map(c -> new ResolvedCredentials(
+                        c.getLoanId() != null ? CredentialSource.LOAN : CredentialSource.ORG,
+                        c.getInstitutionId(),
+                        c.getSellerServicerNumber(),
+                        c.getTpoNumber(),
+                        c.getBranchNumber(),
+                        c.getUsername(),
+                        c.getPassword(),
+                        c.getCreditProviderCode(),
+                        c.getCreditAffiliateCode(),
+                        c.getCreditUsername(),
+                        c.getCreditPassword()))
+                .orElseGet(() -> new ResolvedCredentials(
+                        CredentialSource.NONE, null, null, null, null, null, null, null, null, null, null));
+    }
+
+    private static void apply(VendorCredential cred, UpsertVendorCredentialRequest req) {
         // Identity fields: overwrite only when the request carries a value.
         if (req.institutionId() != null) cred.setInstitutionId(req.institutionId());
         if (req.sellerServicerNumber() != null) cred.setSellerServicerNumber(req.sellerServicerNumber());
@@ -56,15 +139,6 @@ public class VendorCredentialService {
         cred.setPassword(applySecret(cred.getPassword(), req.password()));
         cred.setCreditUsername(applySecret(cred.getCreditUsername(), req.creditUsername()));
         cred.setCreditPassword(applySecret(cred.getCreditPassword(), req.creditPassword()));
-
-        return toResponse(credentials.save(cred));
-    }
-
-    @Transactional(readOnly = true)
-    public List<VendorCredentialResponse> listOrg() {
-        return credentials.findByOrgIdAndLoanIdIsNull(org()).stream()
-                .map(this::toResponse)
-                .toList();
     }
 
     private static String applySecret(String current, String incoming) {

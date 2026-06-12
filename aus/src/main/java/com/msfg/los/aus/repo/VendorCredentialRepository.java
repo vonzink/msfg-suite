@@ -12,5 +12,6 @@ public interface VendorCredentialRepository extends JpaRepository<VendorCredenti
     Optional<VendorCredential> findByOrgIdAndVendorAndLoanIdIsNull(UUID orgId, CredentialVendor vendor);
     Optional<VendorCredential> findByOrgIdAndVendorAndLoanId(UUID orgId, CredentialVendor vendor, UUID loanId);
     List<VendorCredential> findByOrgIdAndLoanIdIsNull(UUID orgId);
+    List<VendorCredential> findByOrgIdAndLoanId(UUID orgId, UUID loanId);
     Optional<VendorCredential> findByIdAndOrgId(UUID id, UUID orgId);
 }
