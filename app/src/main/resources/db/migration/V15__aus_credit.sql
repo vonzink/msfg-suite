@@ -17,7 +17,9 @@ CREATE TABLE vendor_credential (
     credit_password         varchar(1024),        -- encrypted
     version                 bigint NOT NULL DEFAULT 0,
     created_at              timestamptz NOT NULL DEFAULT now(),
-    updated_at              timestamptz NOT NULL DEFAULT now()
+    created_by              varchar(120),
+    updated_at              timestamptz NOT NULL DEFAULT now(),
+    updated_by              varchar(120)
 );
 CREATE UNIQUE INDEX uq_vendor_credential_org ON vendor_credential (org_id, vendor) WHERE loan_id IS NULL;
 CREATE UNIQUE INDEX uq_vendor_credential_loan ON vendor_credential (org_id, vendor, loan_id) WHERE loan_id IS NOT NULL;
@@ -31,7 +33,9 @@ CREATE TABLE aus_profile (
     lpa_settings jsonb NOT NULL DEFAULT '{}',
     version      bigint NOT NULL DEFAULT 0,
     created_at   timestamptz NOT NULL DEFAULT now(),
+    created_by   varchar(120),
     updated_at   timestamptz NOT NULL DEFAULT now(),
+    updated_by   varchar(120),
     CONSTRAINT uq_aus_profile UNIQUE (org_id, loan_id)
 );
 
@@ -55,7 +59,9 @@ CREATE TABLE credit_order (
     error_message             varchar(1000),
     version                   bigint NOT NULL DEFAULT 0,
     created_at                timestamptz NOT NULL DEFAULT now(),
-    updated_at                timestamptz NOT NULL DEFAULT now()
+    created_by                varchar(120),
+    updated_at                timestamptz NOT NULL DEFAULT now(),
+    updated_by                varchar(120)
 );
 CREATE INDEX idx_credit_order_org_loan ON credit_order (org_id, loan_id, requested_at);
 
@@ -79,7 +85,9 @@ CREATE TABLE aus_run (
     error_message             varchar(1000),
     version                   bigint NOT NULL DEFAULT 0,
     created_at                timestamptz NOT NULL DEFAULT now(),
-    updated_at                timestamptz NOT NULL DEFAULT now()
+    created_by                varchar(120),
+    updated_at                timestamptz NOT NULL DEFAULT now(),
+    updated_by                varchar(120)
 );
 CREATE INDEX idx_aus_run_org_loan ON aus_run (org_id, loan_id, requested_at);
 
