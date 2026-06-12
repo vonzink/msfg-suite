@@ -282,6 +282,42 @@ class AusRunIT extends AbstractIntegrationTest {
         assertThat(ausRunCount(loanId)).isEqualTo(2);
     }
 
+    /**
+     * Casefile continuity must survive a failed submission: when the LATEST same-vendor row is an
+     * ERROR audit row (no vendorCaseId), the resolver skips it and reuses the newest row that
+     * actually carries a casefile id. Both prior rows are JDBC-seeded with a sentinel caseId the
+     * deterministic stub would never mint — a real first run would mask the regression, because
+     * the stub re-mints the SAME id per (loanId, vendor) even when continuity is broken.
+     */
+    @Test
+    void resubmitSkipsErrorRowsWhenResolvingCaseId() throws Exception {
+        putOrgCreds("DU");
+        String lo = UUID.randomUUID().toString();
+        String loanId = createLoan(lo);
+        String borrowerId = addBorrower(lo, loanId);
+        putReissueProfile(lo, loanId, "du", borrowerId, "ABC123");
+
+        // Older COMPLETE run that owns the vendor casefile id (column list mirrors V15;
+        // messages/version/timestamps come from the table defaults).
+        jdbc.update("""
+                insert into aus_run (id, org_id, loan_id, vendor, status, vendor_case_id, requested_at)
+                values (?::uuid, ?::uuid, ?::uuid, 'DU', 'COMPLETE', 'DU-SEEDED01', now() - interval '1 hour')
+                """, UUID.randomUUID().toString(), DEFAULT_ORG, loanId);
+        // Newer failed-submission audit row: status ERROR, NO vendor_case_id.
+        jdbc.update("""
+                insert into aus_run (id, org_id, loan_id, vendor, status, error_message, requested_at)
+                values (?::uuid, ?::uuid, ?::uuid, 'DU', 'ERROR', 'vendor unavailable (seeded)', now())
+                """, UUID.randomUUID().toString(), DEFAULT_ORG, loanId);
+
+        mvc.perform(post("/api/loans/{loanId}/aus/run", loanId).with(as(lo, "ROLE_LO"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"vendor\":\"DU\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data[0].vendorCaseId").value("DU-SEEDED01"));
+
+        assertThat(ausRunCount(loanId)).isEqualTo(3);
+    }
+
     @Test
     void crossOrg404() throws Exception {
         String lo = UUID.randomUUID().toString();

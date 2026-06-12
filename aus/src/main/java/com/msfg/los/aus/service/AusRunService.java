@@ -56,6 +56,7 @@ public class AusRunService {
     private final LoanAccessGuard accessGuard;
     private final BorrowerRepository borrowers;
     private final CurrentUser currentUser;
+    private final AusRunErrorRecorder errorRecorder;
 
     public AusRunService(AusRunRepository runs,
                          AusVendorPort ausVendor,
@@ -66,7 +67,8 @@ public class AusRunService {
                          LoanService loanService,
                          LoanAccessGuard accessGuard,
                          BorrowerRepository borrowers,
-                         CurrentUser currentUser) {
+                         CurrentUser currentUser,
+                         AusRunErrorRecorder errorRecorder) {
         this.runs = runs;
         this.ausVendor = ausVendor;
         this.credentials = credentials;
@@ -77,6 +79,7 @@ public class AusRunService {
         this.accessGuard = accessGuard;
         this.borrowers = borrowers;
         this.currentUser = currentUser;
+        this.errorRecorder = errorRecorder;
     }
 
     @Transactional
@@ -154,9 +157,11 @@ public class AusRunService {
 
         AusLoanFile loanFile = loanFile(loan, settings, loanBorrowers.size());
 
-        // Resubmits reuse the vendor-assigned casefile id from the latest prior run for this vendor.
+        // Resubmits reuse the vendor-assigned casefile id from the latest prior run for this
+        // vendor that actually got one — ERROR rows carry no vendorCaseId and must not break
+        // casefile continuity after a failed submit.
         String existingCaseId = runs.findByLoanIdOrderByRequestedAtDescIdDesc(loanId).stream()
-                .filter(r -> r.getVendor() == vendor)
+                .filter(r -> r.getVendor() == vendor && r.getVendorCaseId() != null)
                 .findFirst()
                 .map(AusRun::getVendorCaseId)
                 .orElse(null);
@@ -166,15 +171,9 @@ public class AusRunService {
             result = ausVendor.submit(new AusSubmission(
                     vendor, loanId, existingCaseId, creds, wiring, loanFile));
         } catch (RuntimeException ex) {
-            // Async-safe seam: keep an ERROR row for the failed submission, then rethrow.
-            AusRun error = new AusRun();
-            error.setLoanId(loanId);
-            error.setVendor(vendor);
-            error.setStatus(AusRunStatus.ERROR);
-            error.setErrorMessage(truncate(ex.getMessage(), 1000));
-            error.setRequestedBy(currentUser.id().orElse(null));
-            error.setRequestedAt(Instant.now());
-            runs.save(error);
+            // The rethrow marks this transaction rollback-only, so the ERROR audit row is
+            // persisted in its own REQUIRES_NEW transaction to survive the rollback.
+            errorRecorder.recordError(loanId, vendor, ex.getMessage(), currentUser.id().orElse(null));
             throw ex;
         }
 
@@ -219,15 +218,11 @@ public class AusRunService {
                 settings.fhaCaseNumber());
     }
 
-    private static String truncate(String s, int max) {
-        if (s == null) return null;
-        return s.length() <= max ? s : s.substring(0, max);
-    }
-
     private AusRunResponse toResponse(AusRun r) {
         return new AusRunResponse(r.getId(), r.getVendor(), r.getStatus(), r.getVendorCaseId(),
                 r.getVendorTransactionId(), r.getRecommendation(), r.getRawRecommendation(),
                 r.getRawEligibility(), r.getCreditReportIdentifier(), r.getFindingsHtmlDocumentId(),
-                r.getFindingsXmlDocumentId(), r.getMessages(), r.getRequestedBy(), r.getRequestedAt());
+                r.getFindingsXmlDocumentId(), r.getMessages(), r.getRequestedBy(), r.getRequestedAt(),
+                r.getErrorMessage());
     }
 }
