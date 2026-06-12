@@ -140,12 +140,15 @@ Exact schemas: see `/v3/api-docs`.
   - **Run:** `POST /api/loans/{loanId}/aus/run` `{vendor: DU|LPA|ONE_CLICK}` → **201 `AusRunResponse[]`** (ONE_CLICK = both, DU then LPA). Each run: `vendorCaseId` (DU casefile / LPA Key — stable across resubmits), normalized `recommendation` (`APPROVE_ELIGIBLE…OUT_OF_SCOPE`, `ACCEPT`, `CAUTION`) + raw vendor strings, `creditReportIdentifier`, and **two findings documents** (`AUS_FINDINGS` HTML + XML) downloadable via the binary content endpoint. REISSUE mode without refs → 400; ORDER mode auto-creates a credit order first.
   - **History:** `GET /api/loans/{loanId}/aus/history` — newest-first, includes `errorMessage` for failed runs.
   - **Credit orders:** `POST /api/loans/{loanId}/credit/order` `{action SUBMIT|FORCE_NEW|REISSUE|UPGRADE, requestType INDIVIDUAL|JOINT, bureaus?, borrowerIds, creditReportIdentifier?}` → 201 with `creditReportIdentifier` (the id that feeds DU/LPA reissue), per-borrower-per-bureau `scores[]`, and a stored `CREDIT_REPORT` document. `GET /api/loans/{loanId}/credit/orders` — history.
+- **Contacts** (processing — the loan's people roster)
+  - `POST | GET | PATCH | DELETE /api/loans/{loanId}/contacts[/{contactId}]` — `{role, name, company, phone, email}`.
+    `role` is the `ContactRole` enum (`LISTING_AGENT, SELLING_AGENT, ESCROW_OFFICER, TITLE_COMPANY, INSURANCE_AGENT, ATTORNEY, APPRAISER, OTHER` — maps 1:1 to your `CONTACT_ROLES` display strings). `name` required; PATCH is per-field; stable `ordinal` ordering.
 - **Admin** (platform)
   - `/api/admin/**` — org/tenant provisioning etc. (`PLATFORM_ADMIN` only).
 
 **✅ The full 1003 (URLA) is merged and live** — every screen in your build plan is buildable now (Specs 1–7).
-*Processing-stage modules: **Fees ✅ · Change of Circumstance ✅ · Document Manager ✅ · Pricing/Lock ✅ · AUS + Credit ✅ shipped.**
-Coming next (additive): Contacts (§6) → disclosures; plus small deferred bits — Details-of-Transaction/
+*Processing-stage modules: **Fees ✅ · Change of Circumstance ✅ · Document Manager ✅ · Pricing/Lock ✅ · AUS + Credit ✅ · Contacts ✅ — the frontend work-order is COMPLETE.**
+Coming next (additive): disclosures; plus small deferred bits — Details-of-Transaction/
 cash-to-close (Spec 6C), down-payment-source checkboxes, multi-lien/joint REO. Watch `/v3/api-docs` + `docs/ROADMAP.md`.*
 
 ## Design inputs (use these)
