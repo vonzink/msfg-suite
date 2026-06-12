@@ -10,5 +10,6 @@ public enum DocumentType {
     INSURANCE,
     CONDITION,
     LOCK_CONFIRMATION,
+    AUS_FINDINGS,
     OTHER
 }
