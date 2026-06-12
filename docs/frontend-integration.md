@@ -133,12 +133,19 @@ Exact schemas: see `/v3/api-docs`.
   - `GET /api/loans/{loanId}/pricing/lock/history` → `LockEventResponse[]` (`action, actor, occurredAt, rate, commitmentDays, expirationDate`) — append-only audit, oldest-first.
   - Lock actions (all → 200 `PricingResponse`; wrong state → **409 `LOCK_STATE_CONFLICT`**): `POST …/pricing/lock/control-your-price` `{rate, commitmentDays ∈ 15|30|45|60|90, compensationPayerType}` · `POST …/pricing/lock/extend` `{additionalDays 1..60}` (LOCKED only) · `POST …/pricing/lock/rate-change` `{rate}` (LOCKED only) · `POST …/pricing/lock/relock` `{rate, commitmentDays, compensationPayerType}` (EXPIRED only).
   - `POST /api/loans/{loanId}/pricing/lock-confirmation` → 201 `DocumentResponse` (409 unless effectively LOCKED) — the lock-confirmation letter; appears in `GET …/documents?type=LOCK_CONFIRMATION`, download via the binary content endpoint. (`DocumentType` gained `LOCK_CONFIRMATION`.)
+- **AUS + Credit** (processing — DU/LPA runs + credit ordering, stub vendors behind ports shaped to the real wire surfaces)
+  - **Org credentials (`ROLE_ADMIN` only):** `GET /api/org/vendor-credentials` · `PUT /api/org/vendor-credentials/{DU|LPA|CREDIT}`. Secrets are **write-only**: responses carry `usernameSet/passwordSet` booleans + a `usernameMasked` hint (`f•••r`) — raw values are never returned. PUT semantics: omit a secret = keep it, `""` = clear it. Encrypted at rest.
+  - **Per-loan credential overrides:** `GET|PUT|DELETE /api/loans/{loanId}/aus/credentials[/{vendor}]` — same masked semantics; resolution at run time is **whole-row: loan override > org default > 409 `MISSING_CREDENTIALS`**.
+  - **AUS profile (your AusPage form):** `GET|PUT /api/loans/{loanId}/aus/profile` → per-vendor `{issueMode ORDER|REISSUE, creditProviderCode, fhaCaseNumber (DU), branchNumber (LPA), creditReferences:[{borrowerId, reference}]}` + read-only `credentialSource: ORG|LOAN|NONE` per vendor. PUT with one vendor leaves the other untouched; unknown borrower in refs → 400.
+  - **Run:** `POST /api/loans/{loanId}/aus/run` `{vendor: DU|LPA|ONE_CLICK}` → **201 `AusRunResponse[]`** (ONE_CLICK = both, DU then LPA). Each run: `vendorCaseId` (DU casefile / LPA Key — stable across resubmits), normalized `recommendation` (`APPROVE_ELIGIBLE…OUT_OF_SCOPE`, `ACCEPT`, `CAUTION`) + raw vendor strings, `creditReportIdentifier`, and **two findings documents** (`AUS_FINDINGS` HTML + XML) downloadable via the binary content endpoint. REISSUE mode without refs → 400; ORDER mode auto-creates a credit order first.
+  - **History:** `GET /api/loans/{loanId}/aus/history` — newest-first, includes `errorMessage` for failed runs.
+  - **Credit orders:** `POST /api/loans/{loanId}/credit/order` `{action SUBMIT|FORCE_NEW|REISSUE|UPGRADE, requestType INDIVIDUAL|JOINT, bureaus?, borrowerIds, creditReportIdentifier?}` → 201 with `creditReportIdentifier` (the id that feeds DU/LPA reissue), per-borrower-per-bureau `scores[]`, and a stored `CREDIT_REPORT` document. `GET /api/loans/{loanId}/credit/orders` — history.
 - **Admin** (platform)
   - `/api/admin/**` — org/tenant provisioning etc. (`PLATFORM_ADMIN` only).
 
 **✅ The full 1003 (URLA) is merged and live** — every screen in your build plan is buildable now (Specs 1–7).
-*Processing-stage modules: **Fees ✅ · Change of Circumstance ✅ · Document Manager ✅ · Pricing/Lock ✅ shipped.**
-Coming next (additive): AUS → Contacts (§6) → disclosures; plus small deferred bits — Details-of-Transaction/
+*Processing-stage modules: **Fees ✅ · Change of Circumstance ✅ · Document Manager ✅ · Pricing/Lock ✅ · AUS + Credit ✅ shipped.**
+Coming next (additive): Contacts (§6) → disclosures; plus small deferred bits — Details-of-Transaction/
 cash-to-close (Spec 6C), down-payment-source checkboxes, multi-lien/joint REO. Watch `/v3/api-docs` + `docs/ROADMAP.md`.*
 
 ## Design inputs (use these)

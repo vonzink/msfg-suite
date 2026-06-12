@@ -13,7 +13,7 @@ webhooks) so the backend is a cloud-agnostic Docker image. MSFG is tenant #1.
 
 ---
 
-## 📍 Current status (2026-06-10) — 12 modules, migrations through **V13**, **252 tests**, all on `main`
+## 📍 Current status (2026-06-12) — 14 modules, migrations through **V15**, **370 tests**, all on `main`
 
 **The full 1003 (URLA) is complete** (Milestones 0–1 below, Specs 1–7). Since then, backend has been built to
 match the **already-shipped frontend** (separate repo `msfg-suite-web`, parallel session), driven by its work-order
