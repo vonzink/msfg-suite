@@ -9,5 +9,6 @@ public enum DocumentType {
     INCOME_DOC,
     INSURANCE,
     CONDITION,
+    LOCK_CONFIRMATION,
     OTHER
 }

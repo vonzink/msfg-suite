@@ -104,24 +104,32 @@ public class DocumentService {
         documents.delete(doc);
     }
 
+    /** Store a server-generated artifact (letters, confirmations) behind the storage port. */
+    @Transactional
+    public Document storeGenerated(UUID loanId, DocumentType type, String category,
+                                   String fileName, String contentType, byte[] bytes) {
+        accessGuard.assertCanAccess(loanService.get(loanId));
+        Document doc = new Document();
+        doc.setLoanId(loanId);
+        doc.setDocumentType(type);
+        doc.setCategory(category);
+        doc.setFileName(fileName);
+        doc.setContentType(contentType);
+        doc.setSizeBytes((long) bytes.length);
+        doc.setStorageKey(UUID.randomUUID().toString());
+        documents.save(doc);
+        port.store(doc.getStorageKey(), bytes, doc.getContentType());
+        return doc;
+    }
+
     @Transactional
     public Document generatePreApproval(UUID loanId) {
         accessGuard.assertCanAccess(loanService.get(loanId));
         var loan = loanService.get(loanId);
         String name = borrowerNameResolver.primaryBorrowerNamesByLoanIds(List.of(loanId)).get(loanId);
         String html = generator.generate(loan, name);
-        byte[] bytes = html.getBytes(StandardCharsets.UTF_8);
-
-        Document doc = new Document();
-        doc.setLoanId(loanId);
-        doc.setDocumentType(DocumentType.PRE_APPROVAL);
-        doc.setFileName("pre-approval-" + loan.getLoanNumber() + ".html");
-        doc.setContentType("text/html");
-        doc.setSizeBytes((long) bytes.length);
-        doc.setStorageKey(UUID.randomUUID().toString());
-
-        documents.save(doc);
-        port.store(doc.getStorageKey(), bytes, doc.getContentType());
-        return doc;
+        return storeGenerated(loanId, DocumentType.PRE_APPROVAL, null,
+                "pre-approval-" + loan.getLoanNumber() + ".html", "text/html",
+                html.getBytes(StandardCharsets.UTF_8));
     }
 }
