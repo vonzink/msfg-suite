@@ -337,4 +337,66 @@ class AusRunIT extends AbstractIntegrationTest {
         mvc.perform(get("/api/loans/{loanId}/aus/history", UUID.randomUUID()))
                 .andExpect(status().isUnauthorized());
     }
+
+    // ------------------------------------------------------------------
+    // Task 10 — role/negative coverage
+    // ------------------------------------------------------------------
+
+    /** Org-wide back-office access: a PROCESSOR who is NOT the LO can run AUS on the loan. */
+    @Test
+    void processorCanRunAus() throws Exception {
+        putOrgCreds("DU");
+        String lo = UUID.randomUUID().toString();
+        String loanId = createLoan(lo);
+        String borrowerId = addBorrower(lo, loanId);
+        putReissueProfile(lo, loanId, "du", borrowerId, "ABC123");
+        String processorSub = UUID.randomUUID().toString();
+
+        mvc.perform(post("/api/loans/{loanId}/aus/run", loanId)
+                        .with(as(processorSub, "ROLE_PROCESSOR"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"vendor\":\"DU\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data[0].recommendation").value("APPROVE_ELIGIBLE"))
+                .andExpect(jsonPath("$.data[0].requestedBy").value(processorSub));
+
+        assertThat(ausRunCount(loanId)).isEqualTo(1);
+    }
+
+    /**
+     * LOs are owner-scoped: a DIFFERENT LO in the SAME org gets 403 on another LO's loan.
+     * Creds + profile are fully seeded so the rejection can only be the access guard
+     * (without the guard this exact request would 201).
+     */
+    @Test
+    void loOnAnotherLosLoan403() throws Exception {
+        putOrgCreds("DU");
+        String owner = UUID.randomUUID().toString();
+        String loanId = createLoan(owner);
+        String borrowerId = addBorrower(owner, loanId);
+        putReissueProfile(owner, loanId, "du", borrowerId, "ABC123");
+
+        mvc.perform(post("/api/loans/{loanId}/aus/run", loanId)
+                        .with(as(UUID.randomUUID().toString(), "ROLE_LO"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"vendor\":\"DU\"}"))
+                .andExpect(status().isForbidden());
+
+        assertThat(ausRunCount(loanId)).isEqualTo(0);
+    }
+
+    /** Unknown enum constant in the body (vendor=BOTH) → 400 VALIDATION_ERROR (notReadable handler). */
+    @Test
+    void badVendorEnum400() throws Exception {
+        String lo = UUID.randomUUID().toString();
+        String loanId = createLoan(lo);
+
+        mvc.perform(post("/api/loans/{loanId}/aus/run", loanId).with(as(lo, "ROLE_LO"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"vendor\":\"BOTH\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+
+        assertThat(ausRunCount(loanId)).isEqualTo(0);
+    }
 }

@@ -289,4 +289,19 @@ class VendorCredentialIT extends AbstractIntegrationTest {
         assertThat(r.source()).isEqualTo(CredentialSource.NONE);
         assertThat(r.username()).isNull();
     }
+
+    /** CREDIT is addressable at loan scope too (DU | LPA | CREDIT all valid per-loan vendors). */
+    @Test
+    void loanScopeCreditVendorAllowed() throws Exception {
+        String lo = UUID.randomUUID().toString();
+        String loanId = createLoan(lo);
+
+        mvc.perform(put("/api/loans/{loanId}/aus/credentials/CREDIT", loanId)
+                        .with(as(lo, "ROLE_LO"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"institutionId\":\"CR-INST\",\"creditProviderCode\":\"1\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.vendor").value("CREDIT"))
+                .andExpect(jsonPath("$.data.institutionId").value("CR-INST"));
+    }
 }

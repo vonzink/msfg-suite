@@ -199,4 +199,36 @@ class AusProfileIT extends AbstractIntegrationTest {
         mvc.perform(get("/api/loans/{loanId}/aus/profile", UUID.randomUUID()))
                 .andExpect(status().isUnauthorized());
     }
+
+    // ------------------------------------------------------------------
+    // Task 10 — role/negative coverage
+    // ------------------------------------------------------------------
+
+    /** Access-model pin: PLATFORM_ADMIN administers orgs, NOT loan files — 403 on loan data. */
+    @Test
+    void platformAdminCannotReadProfile403() throws Exception {
+        String lo = UUID.randomUUID().toString();
+        String loanId = createLoan(lo);
+
+        mvc.perform(get("/api/loans/{loanId}/aus/profile", loanId)
+                        .with(as(UUID.randomUUID().toString(), "ROLE_PLATFORM_ADMIN")))
+                .andExpect(status().isForbidden());
+    }
+
+    /** Org-wide back-office access: a PROCESSOR who is NOT the LO reads the profile + run history. */
+    @Test
+    void processorOrgWideCanReadProfileAndRun() throws Exception {
+        String lo = UUID.randomUUID().toString();
+        String loanId = createLoan(lo);
+        String processorSub = UUID.randomUUID().toString();
+
+        mvc.perform(get("/api/loans/{loanId}/aus/profile", loanId)
+                        .with(as(processorSub, "ROLE_PROCESSOR")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.du.creditReferences").isArray());
+
+        mvc.perform(get("/api/loans/{loanId}/aus/history", loanId)
+                        .with(as(processorSub, "ROLE_PROCESSOR")))
+                .andExpect(status().isOk());
+    }
 }
