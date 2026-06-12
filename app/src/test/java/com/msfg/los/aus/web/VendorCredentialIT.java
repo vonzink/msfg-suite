@@ -162,6 +162,20 @@ class VendorCredentialIT extends AbstractIntegrationTest {
                 .andExpect(status().isForbidden());
     }
 
+    // Platform operators administer orgs, never tenant vendor secrets — hasRole("ADMIN") excludes PLATFORM_ADMIN.
+    @Test
+    void platformAdminForbiddenOnOrgCredentials403() throws Exception {
+        mvc.perform(get("/api/org/vendor-credentials")
+                        .with(as(UUID.randomUUID().toString(), "ROLE_PLATFORM_ADMIN")))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(put("/api/org/vendor-credentials/DU")
+                        .with(as(UUID.randomUUID().toString(), "ROLE_PLATFORM_ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"institutionId\":\"X\"}"))
+                .andExpect(status().isForbidden());
+    }
+
     @Test
     void noToken401() throws Exception {
         mvc.perform(get("/api/org/vendor-credentials"))
