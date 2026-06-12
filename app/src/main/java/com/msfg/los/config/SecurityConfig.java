@@ -36,6 +36,7 @@ public class SecurityConfig {
                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                 .requestMatchers("/api/admin/**").hasRole("PLATFORM_ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/loans").hasAnyRole("LO", "ADMIN")
+                .requestMatchers("/api/org/**").hasRole("ADMIN")
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().denyAll())
             .oauth2ResourceServer(o -> o.jwt(j -> j.jwtAuthenticationConverter(jwtAuthConverter())))

@@ -11,6 +11,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
@@ -58,6 +59,16 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> handleNotReadable(HttpMessageNotReadableException ex) {
         return ResponseEntity.badRequest()
             .body(ApiError.of("VALIDATION_ERROR", "Malformed request body", Map.of(), Instant.now()));
+    }
+
+    // Path-variable / query-param conversion failures (unknown enum constant, non-UUID id) are
+    // client errors (400), not 500s. Echo the parameter NAME only — never the offending value
+    // (request fragments can carry NPI).
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiError> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        return ResponseEntity.badRequest()
+            .body(ApiError.of("VALIDATION_ERROR", "Invalid value for parameter '" + ex.getName() + "'",
+                Map.of(), Instant.now()));
     }
 
     // Catch-all so unexpected failures return our ApiError envelope (not Spring's default /error shape).
