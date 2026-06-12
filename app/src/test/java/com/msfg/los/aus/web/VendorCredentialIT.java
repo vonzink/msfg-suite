@@ -132,9 +132,12 @@ class VendorCredentialIT extends AbstractIntegrationTest {
         // Re-PUT inside this test so it is independent of method order.
         putDu("{\"password\":\"s3cret-pw\"}");
 
+        // Org-scoped: the superuser probe bypasses RLS and AusRlsIT seeds org-level
+        // DU rows for OTHER orgs — without the org filter this would match 2+ rows.
         String stored = jdbc.queryForObject(
-                "select password from vendor_credential where vendor='DU' and loan_id is null",
-                String.class);
+                "select password from vendor_credential where vendor='DU' and loan_id is null"
+                        + " and org_id = ?::uuid",
+                String.class, DEFAULT_ORG);
         assertThat(stored)
                 .isNotEqualTo("s3cret-pw")
                 .doesNotContain("s3cret-pw");
