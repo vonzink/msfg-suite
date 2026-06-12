@@ -127,13 +127,19 @@ Exact schemas: see `/v3/api-docs`.
   - `GET /api/loans/{loanId}/documents/{docId}/content` → the **raw file bytes** (`Content-Type` + `Content-Disposition: attachment`) — a binary download, **not** the `ApiResponse` envelope. Use an `<a download>`/blob fetch, not the typed client's JSON unwrap.
   - `DELETE /api/loans/{loanId}/documents/{docId}` → 204.
   - `POST /api/loans/{loanId}/documents/pre-approval` → generates + stores an HTML pre-approval letter from the loan, returns the `DocumentResponse` (it then appears in `GET …/documents?type=PRE_APPROVAL`). **This is your disabled "Generate Pre-Approval Letter" button.**
+- **Products & Pricing / Rate Lock** (processing — lights up the pricing page + the SUMMARY panel lock rows)
+  - `GET /api/loans/{loanId}/pricing` → `PricingResponse` (`lockStatus` NOT_LOCKED|LOCKED|EXPIRED, `interestRate`, `commitmentDays`, `lockDate`, `currentExpiration`, `extensionDaysTotal`, `compensationPayerType` LENDER_PAID|BORROWER_PAID, `lockedBy`, `interviewerEmail`, `totalLoanAmount`, `exactRateType`). **Always 200** — NOT_LOCKED returns nulls + the loan's rate.
+  - `GET /api/loans/{loanId}/pricing/adjustments` → `PricingAdjustmentResponse[]` (`ordinal, name, rowType` BASE|ADJUSTMENT|FINAL|COMPENSATION|FINAL_AFTER_COMP, `adjustmentPercent, dollarAmount`) — the **frozen snapshot from the last lock action** (`totalLoanAmount` on `/pricing` is computed live, so the two can diverge if loan amounts change after locking; the next lock action re-quotes). `[]` if never priced.
+  - `GET /api/loans/{loanId}/pricing/lock/history` → `LockEventResponse[]` (`action, actor, occurredAt, rate, commitmentDays, expirationDate`) — append-only audit, oldest-first.
+  - Lock actions (all → 200 `PricingResponse`; wrong state → **409 `LOCK_STATE_CONFLICT`**): `POST …/pricing/lock/control-your-price` `{rate, commitmentDays ∈ 15|30|45|60|90, compensationPayerType}` · `POST …/pricing/lock/extend` `{additionalDays 1..60}` (LOCKED only) · `POST …/pricing/lock/rate-change` `{rate}` (LOCKED only) · `POST …/pricing/lock/relock` `{rate, commitmentDays, compensationPayerType}` (EXPIRED only).
+  - `POST /api/loans/{loanId}/pricing/lock-confirmation` → 201 `DocumentResponse` (409 unless effectively LOCKED) — the lock-confirmation letter; appears in `GET …/documents?type=LOCK_CONFIRMATION`, download via the binary content endpoint. (`DocumentType` gained `LOCK_CONFIRMATION`.)
 - **Admin** (platform)
   - `/api/admin/**` — org/tenant provisioning etc. (`PLATFORM_ADMIN` only).
 
 **✅ The full 1003 (URLA) is merged and live** — every screen in your build plan is buildable now (Specs 1–7).
-*Processing-stage modules: **Fees ✅ · Change of Circumstance ✅ · Document Manager ✅ shipped.** Coming next
-(additive): Pricing/Lock → AUS → disclosures; plus small deferred bits — Details-of-Transaction/cash-to-close
-(Spec 6C), down-payment-source checkboxes, multi-lien/joint REO. Watch `/v3/api-docs` + `docs/ROADMAP.md`.*
+*Processing-stage modules: **Fees ✅ · Change of Circumstance ✅ · Document Manager ✅ · Pricing/Lock ✅ shipped.**
+Coming next (additive): AUS → Contacts (§6) → disclosures; plus small deferred bits — Details-of-Transaction/
+cash-to-close (Spec 6C), down-payment-source checkboxes, multi-lien/joint REO. Watch `/v3/api-docs` + `docs/ROADMAP.md`.*
 
 ## Design inputs (use these)
 The UI is modeled on **UWM EASE**. Rich design material already lives in this repo:
