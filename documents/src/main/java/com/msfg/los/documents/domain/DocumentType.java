@@ -11,5 +11,7 @@ public enum DocumentType {
     CONDITION,
     LOCK_CONFIRMATION,
     AUS_FINDINGS,
+    LOAN_ESTIMATE,
+    CLOSING_DISCLOSURE,
     OTHER
 }
