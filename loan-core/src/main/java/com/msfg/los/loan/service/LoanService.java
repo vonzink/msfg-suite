@@ -125,6 +125,8 @@ public class LoanService {
         if (req.occupancyType() != null) p.setOccupancyType(req.occupancyType());
         if (req.numberOfUnits() != null) p.setNumberOfUnits(req.numberOfUnits());
 
+        if (req.consummationDate() != null) loan.setConsummationDate(req.consummationDate());
+
         // Validation — each rule its own if/throw
         if (loan.getInterestRate() != null && (loan.getInterestRate().signum() < 0 || loan.getInterestRate().compareTo(java.math.BigDecimal.valueOf(25)) > 0))
             throw new ValidationException("interestRate must be between 0 and 25");

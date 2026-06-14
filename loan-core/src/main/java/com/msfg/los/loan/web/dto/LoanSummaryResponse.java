@@ -2,6 +2,7 @@ package com.msfg.los.loan.web.dto;
 
 import com.msfg.los.loan.domain.*;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.UUID;
 
 public record LoanSummaryResponse(
@@ -39,7 +40,9 @@ public record LoanSummaryResponse(
     String addressLine1,
     String addressLine2,
     String postalCode,
-    BigDecimal estimatedValue) {
+    BigDecimal estimatedValue,
+    // TRID disclosure timing
+    LocalDate consummationDate) {
 
     public static LoanSummaryResponse from(Loan l) {
         SubjectProperty sp = l.getSubjectProperty();
@@ -70,6 +73,7 @@ public record LoanSummaryResponse(
             sp != null ? sp.getAddressLine1() : null,
             sp != null ? sp.getAddressLine2() : null,
             sp != null ? sp.getPostalCode() : null,
-            sp != null ? sp.getEstimatedValue() : null);
+            sp != null ? sp.getEstimatedValue() : null,
+            l.getConsummationDate());
     }
 }

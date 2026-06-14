@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
@@ -52,6 +53,10 @@ public class Loan extends TenantScopedEntity {
     private BigDecimal proposedHazardInsuranceMonthly;
     private BigDecimal proposedHoaDuesMonthly;
     private BigDecimal proposedMortgageInsuranceMonthly;
+
+    // TRID consummation date (drives disclosure timing). Additive.
+    @Column(name = "consummation_date")
+    private LocalDate consummationDate;
 
     @Embedded
     private SubjectProperty subjectProperty = new SubjectProperty();

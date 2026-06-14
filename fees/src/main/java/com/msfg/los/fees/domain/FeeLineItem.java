@@ -31,4 +31,12 @@ public class FeeLineItem extends TenantScopedEntity {
     private BigDecimal sellerConcession;
 
     private BigDecimal percent;
+
+    // TRID tolerance facts (additive). paidTo stored as String — no cross-module enum dep on disclosures.
+    @Column(name = "paid_to")
+    private String paidTo;
+
+    private Boolean consumerCanShop;
+
+    private Boolean onWrittenList;
 }

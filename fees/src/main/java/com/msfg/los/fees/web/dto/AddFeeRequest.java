@@ -11,4 +11,7 @@ public record AddFeeRequest(
         @NotBlank String label,
         BigDecimal amount,
         BigDecimal sellerConcession,
-        BigDecimal percent) {}
+        BigDecimal percent,
+        String paidTo,
+        Boolean consumerCanShop,
+        Boolean onWrittenList) {}

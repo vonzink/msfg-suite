@@ -74,6 +74,9 @@ public class FeeService {
         f.setAmount(req.amount());
         f.setSellerConcession(req.sellerConcession());
         f.setPercent(req.percent());
+        f.setPaidTo(req.paidTo());
+        f.setConsumerCanShop(req.consumerCanShop());
+        f.setOnWrittenList(req.onWrittenList());
         f.setOrdinal(nextOrdinal(loanId));
         return fees.save(f);
     }
@@ -101,6 +104,9 @@ public class FeeService {
         f.setAmount(req.amount());
         f.setSellerConcession(req.sellerConcession());
         f.setPercent(req.percent());
+        f.setPaidTo(req.paidTo());
+        f.setConsumerCanShop(req.consumerCanShop());
+        f.setOnWrittenList(req.onWrittenList());
         return fees.save(f);
     }
 
@@ -124,6 +130,15 @@ public class FeeService {
         if (req.percent() != null) {
             requireNonNegativePercent(req.percent());
             f.setPercent(req.percent());
+        }
+        if (req.paidTo() != null) {
+            f.setPaidTo(req.paidTo());
+        }
+        if (req.consumerCanShop() != null) {
+            f.setConsumerCanShop(req.consumerCanShop());
+        }
+        if (req.onWrittenList() != null) {
+            f.setOnWrittenList(req.onWrittenList());
         }
         return fees.save(f);
     }

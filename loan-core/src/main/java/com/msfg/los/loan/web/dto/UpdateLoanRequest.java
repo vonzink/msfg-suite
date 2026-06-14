@@ -2,6 +2,7 @@ package com.msfg.los.loan.web.dto;
 
 import com.msfg.los.loan.domain.*;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 public record UpdateLoanRequest(
     MortgageType mortgageType,
@@ -32,4 +33,6 @@ public record UpdateLoanRequest(
     BigDecimal appraisedValue,
     PropertyType propertyType,
     OccupancyType occupancyType,
-    Integer numberOfUnits) {}
+    Integer numberOfUnits,
+    // TRID disclosure timing
+    LocalDate consummationDate) {}

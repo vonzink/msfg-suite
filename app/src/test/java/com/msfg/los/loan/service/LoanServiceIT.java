@@ -64,7 +64,7 @@ class LoanServiceIT extends AbstractIntegrationTest {
         Loan updated = service.update(loan.getId(), new UpdateLoanRequest(
             null, null, null, null, "5345 S Flanders Way", null, "Centennial", "CO", "80015", null,
             null, null, null, null, null, null, null, null, null, null, null, null,
-            null, null, null, null, null));
+            null, null, null, null, null, null));
         assertThat(updated.getSubjectProperty().getCity()).isEqualTo("Centennial");
         assertThat(updated.getSubjectProperty().getState()).isEqualTo("CO");
     }

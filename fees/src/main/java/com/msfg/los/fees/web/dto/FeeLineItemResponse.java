@@ -14,7 +14,10 @@ public record FeeLineItemResponse(
         String label,
         BigDecimal amount,
         BigDecimal sellerConcession,
-        BigDecimal percent) {
+        BigDecimal percent,
+        String paidTo,
+        Boolean consumerCanShop,
+        Boolean onWrittenList) {
 
     public static FeeLineItemResponse from(FeeLineItem f) {
         return new FeeLineItemResponse(
@@ -25,6 +28,9 @@ public record FeeLineItemResponse(
                 f.getLabel(),
                 f.getAmount(),
                 f.getSellerConcession(),
-                f.getPercent());
+                f.getPercent(),
+                f.getPaidTo(),
+                f.getConsumerCanShop(),
+                f.getOnWrittenList());
     }
 }
