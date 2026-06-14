@@ -1,103 +1,91 @@
 # Backend Progress Report — for the Frontend Team
 
-**Date:** 2026-06-11 · **Backend `main`:** `8242959` · **Tests:** 252 green · **Migrations:** through V13
+**Date:** 2026-06-14 · **Backend `main`:** `c568c51` (code) · **Tests:** 400 green · **Migrations:** through V16 · **16 Gradle modules**
 
-> **TL;DR — regenerate once and swap three stubs.** The backend is running in the `local`
-> profile at `http://localhost:8080` on the latest `main`. Run `npm run gen:api` against
-> `http://localhost:8080/v3/api-docs` and you can swap `FeesProvider`, `CocProvider`, and the
-> Document Manager / pre-approval stubs for real adapters. Zero screen changes expected — every
-> change since your work-order has been additive.
+> **TL;DR — your entire work-order is shipped and live.** The full 1003 (URLA) plus every
+> processing module you requested (§1–§6) is merged, on a running backend at
+> `http://localhost:8080`. Run `npm run gen:api` once against `/v3/api-docs` and every stub adapter
+> in your app can be swapped for the real one. **Disclosures (TRID LE/CD) is the next backend
+> milestone — in design now, no endpoints yet** (don't expect a `/disclosures` surface until it lands).
 
 ---
 
-## Module status
+## Work-order scoreboard — COMPLETE ✅
 
-| Work-order item | Status | Swap your stub? |
+| Your work-order item | Status | Your stub to swap |
 |---|---|---|
-| §3 Contract nits (pipeline, summary fields, `loanOfficerId`, transitions) | ✅ Shipped & live | n/a (already typed) |
-| §1 Fees (line items + totals + invoices) | ✅ Shipped & live (+ upsert upgrade) | **Yes — `FeesProvider`** |
-| §2 Change of Circumstance (draft / submit / history / decision) | ✅ Shipped & live | **Yes — `CocProvider`** |
-| Document Manager (upload / list / download / delete) | ✅ Shipped & live | **Yes** |
-| Pre-approval letter generation | ✅ Shipped & live (HTML letter; PDF later) | **Yes** |
-| §4 Pricing/Lock | ⏳ Not built yet | No — keep static stub |
-| §4 AUS (DU/LPA run + history) | ⏳ Not built yet | No — keep `LocalAusAdapter` |
-| Disclosures | ⏳ Not built yet | No |
+| §1 Fees (line items + totals + invoices) | ✅ Live (+ `PUT` upsert path) | `FeesProvider` |
+| §2 Change of Circumstance (draft/submit/history/decision) | ✅ Live | `CocProvider` |
+| §3 Contract-nits (pipeline enrich, summary fields, optional `loanOfficerId`, transitions) | ✅ Live | n/a (already typed) |
+| §4 Document Manager + Pre-Approval letter | ✅ Live | doc/pre-approval stubs |
+| §4 Pricing / Rate Lock | ✅ Live | static pricing stub |
+| §4 AUS + Credit Vendors (DU/LPA runs, credit ordering) | ✅ Live | `LocalAusAdapter` |
+| §5 Enum/validation → 400 (not 500) | ✅ Live | n/a |
+| §6 Contacts (loan people roster) | ✅ Live | `LocalContactsAdapter` |
 
-The full 1003 surface (borrowers/PII, employment & income, assets & liabilities, REO,
-loan info, qualification calcs, declarations & HMDA) has been live since your last
-regen — unchanged, still additive-only.
-
----
-
-## Endpoint quick reference (new since the 1003)
-
-Field-level detail lives in your `docs/HANDOFF-FROM-BACKEND.md` (dated reply sections) and the
-generated client itself. All endpoints are tenant- + loan-scoped: cross-org → `404`, no token → `401`.
-
-### Fees — `src/features/fees/model.ts` parity
-- **`PUT /api/loans/{loanId}/fees` — recommended write path.** Upsert keyed by `(section,label)`
-  (your Record key `${sectionId}:${label}`). Body `{section, label, amount, sellerConcession, percent?}`;
-  creates or replaces in place (same `id`/`ordinal`), `200` both ways, idempotent.
-- `POST | GET | PATCH | DELETE /api/loans/{loanId}/fees[/{feeId}]` — id-based CRUD also available
-  (duplicate `section+label` on POST → `409`).
-- `GET /api/loans/{loanId}/fees/totals` → `{ sectionTotals: {A…REC}, categoryTotals: { origination,
-  didNotShop, didShop, taxesGov, escrowPrepaids } }` — server-computed, mirrors your formulas
-  (`escrowPrepaids = F+G`), every section present (0 if empty).
-- `GET | PUT /api/loans/{loanId}/fees/invoices` — invoice entries, upsert by `feeLabel`;
-  the boolean JSON field is literally `"final"`.
-- **Negative `amount`/`sellerConcession` are valid** (prorations / section-L credits). `percent ≥ 0`,
-  `label` non-blank. Duplicate/race conflicts always surface as `409`, never 500.
-
-### Change of Circumstance — `src/features/coc/cocModel.ts` parity
-- `GET | PUT /api/loans/{loanId}/coc/draft` — 1:1 draft; GET before any save → `200` with empty arrays.
-- `POST /api/loans/{loanId}/coc/submit` → `201` PENDING history entry and **clears the draft**.
-  `reason` required → `400` with `fields.reason`.
-- `GET /api/loans/{loanId}/coc/history` — newest-first.
-- `POST /api/loans/{loanId}/coc/history/{entryId}/decision` `{decision: "ACCEPT"|"DENY"}` —
-  UNDERWRITER/ADMIN only (else `403`); PENDING-only (else `409`); `decisionBy`/`decisionDate` set server-side.
-
-### Document Manager
-- `POST /api/loans/{loanId}/documents` — **multipart** (`file` + `documentType` + optional `category`).
-  25 MB cap; empty file → `400`.
-- `GET /api/loans/{loanId}/documents?type=` — paged metadata list (never loads bytes).
-- `GET /api/loans/{loanId}/documents/{id}/content` — **binary download. This is the one endpoint that
-  does NOT use the `ApiResponse` envelope** (raw bytes + content headers) — handle it specially in the client.
-- `DELETE /api/loans/{loanId}/documents/{id}`.
-- `POST /api/loans/{loanId}/documents/pre-approval` — generates + stores the pre-approval letter
-  (templated HTML today, PDF generation later) and returns its metadata; fetch via the content endpoint.
-- `GET /api/loans/{loanId}/documents?type=PRE_APPROVAL` — the paged list your pre-approval screen needs.
-
-### Contract nits (§3) — recap
-- `POST /api/loans` — `loanOfficerId` optional; defaults to the authenticated principal.
-- `GET /api/loans` rows include `primaryBorrowerName`, `propertyCity`, `propertyState`, `updatedAt`.
-- `GET /api/loans/{id}` includes `lienPriority`, `amortizationType`, `addressLine1/2`, `postalCode`, `estimatedValue`.
-- `GET /api/loans/{id}/status/transitions` → `{currentStatus, allowedTransitions[]}` — **role-aware**;
-  drive the status dropdown from it and you'll never offer a `403` target.
+Plus the **full 1003 (URLA)** — Personal Info & PII (audited SSN reveal), Employment & Income, Assets
+& Liabilities, REO, Loan Information, Qualification calc, Declarations & HMDA — all live since earlier
+and unchanged. Everything is **additive-only**: no shipped path or field has ever been renamed or removed.
 
 ---
+
+## Live endpoint surface (verified against the running server today)
+
+All under `/api`, tenant- + loan-scoped (cross-org → 404, no token → 401), `ApiResponse` envelope. Exact
+schemas: `/v3/api-docs`. Field-level detail per module: the dated sections in
+`docs/HANDOFF-FROM-BACKEND.md` (in your repo).
+
+- **Loans / pipeline** — `POST|GET|PATCH /api/loans[/{id}]` (optional `loanOfficerId`; enriched pipeline
+  rows; summary carries lien/amortization/address/estimatedValue); `GET …/status/transitions` (role-aware).
+- **Borrowers & PII** — `…/borrowers[/{id}]`, masked SSN + audited `…/reveal-ssn`; address history.
+- **Employment & Income** — `…/employments`, `…/income[/{id}]`, `…/income/summary`, VOI verifications.
+- **Assets & Liabilities** — `…/assets`, `…/liabilities` (DTI include/exclude), summaries, VOA.
+- **REO** — `…/reo[/{id}]` + `…/reo/summary`.
+- **Qualification** (read-only) — `GET …/calculations` (LTV/CLTV/TLTV, P&I, PITI, net rental, DTI; any
+  figure may be `null` when inputs are missing — never a 500).
+- **Declarations & HMDA** — `GET|PUT …/declarations`, `…/demographics`.
+- **Fees** — `PUT …/fees` (upsert by section+label, recommended) · id-based `POST|GET|PATCH|DELETE`
+  · `GET …/fees/totals` · `GET|PUT …/fees/invoices`. Negative amounts allowed (credits); 409 on conflict.
+- **Change of Circumstance** — `GET|PUT …/coc/draft` · `POST …/coc/submit` (reason required → 400
+  `fields.reason`) · `GET …/coc/history` · `POST …/coc/history/{id}/decision` (UNDERWRITER/ADMIN → else 403).
+- **Document Manager** — multipart `POST …/documents` · paged `GET …/documents?type=` · **binary**
+  `GET …/documents/{id}/content` (the one NON-enveloped endpoint — fetch as blob) · `DELETE` ·
+  `POST …/documents/pre-approval`.
+- **Pricing / Rate Lock** — `GET …/pricing` (always 200) · `GET …/pricing/adjustments` (at-lock
+  snapshot) · `GET …/pricing/lock/history` · `POST …/pricing/lock/{control-your-price|extend|rate-change|relock}`
+  (409 `LOCK_STATE_CONFLICT` on wrong state) · `POST …/pricing/lock-confirmation`.
+- **AUS + Credit** — org creds (ADMIN) `GET|PUT /api/org/vendor-credentials[/{vendor}]` (write-only,
+  masked) · loan overrides `…/aus/credentials` · `GET|PUT …/aus/profile` (with `credentialSource`) ·
+  `POST …/aus/run {DU|LPA|ONE_CLICK}` · `GET …/aus/history` · `POST …/credit/order` · `GET …/credit/orders`.
+- **Contacts** — `POST|GET|PATCH|DELETE …/contacts[/{id}]` (`role` enum ×8, name, company, phone, email).
+- **Admin** — `/api/admin/**` (PLATFORM_ADMIN only).
 
 ## Contract invariants (unchanged, guaranteed)
-- `{ success, data }` envelope everywhere (except the binary document download, noted above);
-  paged shape `{items, page, size, total, totalPages}`.
-- Flat errors: `{ success:false, code, message, fields, timestamp }` with the usual
-  `400/401/403/404` semantics (`404` for anything cross-tenant — existence never leaks).
-- **Additive-only:** no shipped path or field has been renamed or removed, and that policy holds
-  for everything still coming.
-- `/v3/api-docs` is CI-guarded (`OpenApiDocsIT`), so client generation should never hit a broken spec.
+- `{ success, data }` everywhere except the binary document download; paged `{items, page, size, total, totalPages}`.
+- Flat errors `{ success:false, code, message, fields, timestamp }` with `400/401/403/404` semantics
+  (404 = not found **or** cross-tenant — existence never leaks across orgs).
+- **Additive-only**, and that holds for everything still coming.
+- `/v3/api-docs` is CI-guarded — client generation never hits a broken spec.
 
-## Known caveats (code around these for now)
-1. **CoC decisions under real (non-`local`) auth:** the loan-access guard currently admits only
-   ADMIN or the loan's own LO, so a true underwriter (different user than the LO) gets `403` on the
-   decision endpoint. In the `local` profile everyone is the dev ADMIN, so your screens work fine
-   today. A role-access-model fix is queued next on the backend — no FE change expected, it will
-   just start returning `200` for real underwriters.
-2. **Malformed enum values → `500` today** (e.g. `"decision":"ACCEPTED"` instead of `ACCEPT`,
-   or a `CocReason` typo). Send exact enum constants from the generated types. A fix mapping these
-   to `400 VALIDATION_ERROR` is already in flight.
-3. **Invoice ⇄ document linking isn't wired yet.** Upload works, invoice rows work, but the field
-   binding an invoice entry to an uploaded document comes with a later batch.
+## Recent hardening (no action needed — behavioral only, zero contract change)
+- **Malformed enum / bad JSON body → 400** (`VALIDATION_ERROR`), not 500 — your typed client renders these cleanly now.
+- **Role access** — back-office roles (PROCESSOR/UNDERWRITER/CLOSER) have **org-wide** loan visibility;
+  LOs are scoped to their own loans; PLATFORM_ADMIN has no loan access. (Matters under real Cognito; in
+  `local` you're the dev ADMIN and see everything.)
+- **Security** — generated documents HTML-escape user input + send `nosniff`; the `cognito:groups` claim
+  is allowlisted against known roles. No new endpoints, no `gen:api` needed for these.
+
+## Resolved caveats from the last report
+- The "underwriter gets 403 on CoC decisions under real auth" caveat — **fixed** (org-wide access model).
+- Malformed-enum → 500 — **fixed** (now 400).
 
 ## What's next on the backend
-**Pricing/Lock → AUS (DU/LPA behind ports, stub-first) → disclosures.** Next migration: V14.
-We'll append a dated section to `docs/HANDOFF-FROM-BACKEND.md` as each lands, same as always,
-and the local backend will be restarted on every merge so `gen:api` always reflects `main`.
+**Disclosures (TRID — Loan Estimate + Closing Disclosure)** is the next milestone, in design now (spec
+written, not yet built). When it lands it will add a `/api/loans/{loanId}/disclosures/**` surface
+(issue LE/CD, timing/deadline status, tolerance buckets, coverage check) plus `LOAN_ESTIMATE` /
+`CLOSING_DISCLOSURE` document types — all additive. The regulated forms + APR are computed behind a
+vendor port (stub-first), same pattern as AUS. **There is nothing for you to build against here yet** —
+I'll append a dated section to `docs/HANDOFF-FROM-BACKEND.md` with the endpoint inventory when it ships,
+as always. After Disclosures: real vendor adapters (DU/LPA/credit/disclosure-vendor onboarding) and the AI milestone.
+
+Anything you need that isn't here → file it in `docs/HANDOFF-BACKEND-REQUESTS.md` and I'll pick it up.
