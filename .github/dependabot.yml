@@ -1,11 +1,10 @@
 version: 2
 updates:
-  # Gradle dependencies — covers the root build, the gradle/libs.versions.toml
-  # version catalog, and per-module build files that pin versions directly.
+  # Gradle dependencies. Versions live in the root build.gradle.kts and the
+  # gradle/libs.versions.toml catalog, so the root directory covers them; the
+  # 17 module build files are BOM-managed (no direct versions to bump).
   - package-ecosystem: gradle
-    directories:
-      - "/"
-      - "/*"
+    directory: "/"
     schedule:
       interval: weekly
       day: monday
@@ -17,6 +16,13 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # Major framework upgrades (Spring Boot 4.x, Testcontainers 2.x, springdoc
+      # 3.x, Gradle 9.x) need a deliberate migration, not an auto-PR — and
+      # auto-attempting them is what tripped Dependabot's change validator
+      # (unknown_error). Minor/patch updates still flow through the group above.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: build
 
