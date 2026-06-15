@@ -8,6 +8,7 @@ import com.msfg.los.disclosures.domain.DisclosureKind;
 import com.msfg.los.disclosures.domain.DisclosureStatus;
 import com.msfg.los.disclosures.domain.DisclosureCostRow;
 import com.msfg.los.disclosures.domain.ReceivedBasis;
+import com.msfg.los.disclosures.domain.ResetReason;
 import com.msfg.los.disclosures.repo.DisclosureEventRepository;
 import com.msfg.los.disclosures.repo.DisclosureIssuanceRepository;
 import com.msfg.los.disclosures.service.DisclosureAssemblyService.AssemblyResult;
@@ -33,6 +34,7 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -61,6 +63,8 @@ public class DisclosureIssuanceService {
     private final CurrentUser currentUser;
     private final TenantContext tenantContext;
     private final TolerancePolicy tolerancePolicy;
+    private final ResetDetector resetDetector;
+    private final DisclosureIssuanceErrorRecorder errorRecorder;
 
     public DisclosureIssuanceService(LoanService loanService,
                                      LoanAccessGuard accessGuard,
@@ -72,7 +76,9 @@ public class DisclosureIssuanceService {
                                      DisclosureEventRepository eventRepo,
                                      CurrentUser currentUser,
                                      TenantContext tenantContext,
-                                     TolerancePolicy tolerancePolicy) {
+                                     TolerancePolicy tolerancePolicy,
+                                     ResetDetector resetDetector,
+                                     DisclosureIssuanceErrorRecorder errorRecorder) {
         this.loanService = loanService;
         this.accessGuard = accessGuard;
         this.assemblyService = assemblyService;
@@ -84,6 +90,8 @@ public class DisclosureIssuanceService {
         this.currentUser = currentUser;
         this.tenantContext = tenantContext;
         this.tolerancePolicy = tolerancePolicy;
+        this.resetDetector = resetDetector;
+        this.errorRecorder = errorRecorder;
     }
 
     private UUID org() {
@@ -96,7 +104,26 @@ public class DisclosureIssuanceService {
         accessGuard.assertCanAccess(loanService.get(loanId));
 
         AssemblyResult ar = assemblyService.assemble(loanId, kind);
-        DisclosureGenerationResult gen = vendorPort.generate(ar.request());
+
+        // Effective prepayment penalty: request override (no loan field carries it yet) else assembled.
+        boolean effectivePrepay = (req != null && req.prepaymentPenalty() != null)
+                ? req.prepaymentPenalty()
+                : ar.request().prepaymentPenalty();
+
+        // For a CD, capture the prior CD BEFORE persisting the new one so reset detection compares
+        // against the last issued version, not against the row we are about to save.
+        DisclosureIssuance priorCd = kind == DisclosureKind.CLOSING_DISCLOSURE
+                ? issuanceRepo.findTopByLoanIdAndKindOrderByDisclosureVersionDesc(loanId, kind).orElse(null)
+                : null;
+
+        DisclosureGenerationResult gen;
+        try {
+            gen = vendorPort.generate(ar.request());
+        } catch (RuntimeException e) {
+            // REQUIRES_NEW ERROR row survives this transaction's rollback; rethrow to fail the request.
+            errorRecorder.recordError(loanId, kind, currentUser.id().orElse(null), e.getMessage());
+            throw e;
+        }
 
         int version = issuanceRepo.findTopByLoanIdAndKindOrderByDisclosureVersionDesc(loanId, kind)
                 .map(prev -> prev.getDisclosureVersion() + 1)
@@ -113,7 +140,13 @@ public class DisclosureIssuanceService {
         DeliveryMethod method = (req != null && req.deliveryMethod() != null)
                 ? req.deliveryMethod()
                 : DeliveryMethod.EMAIL;
-        DeliveryResult del = vendorPort.send(new DeliveryRequest(loanId, null, kind, method));
+        DeliveryResult del;
+        try {
+            del = vendorPort.send(new DeliveryRequest(loanId, null, kind, method));
+        } catch (RuntimeException e) {
+            errorRecorder.recordError(loanId, kind, currentUser.id().orElse(null), e.getMessage());
+            throw e;
+        }
 
         LocalDate today = LocalDate.now();
         LocalDate computedReceived = timingService.constructiveReceived(today);
@@ -132,7 +165,7 @@ public class DisclosureIssuanceService {
         issuance.setTotalOfPayments(gen.totalOfPayments());
         issuance.setTip(gen.tip());
         issuance.setAprIrregularBasis(gen.aprIrregularBasis());
-        issuance.setPrepaymentPenalty(ar.request().prepaymentPenalty());
+        issuance.setPrepaymentPenalty(effectivePrepay);
         issuance.setProductDescription(ar.request().productDescription());
         issuance.setDeliveryMethod(method);
         issuance.setDeliveredAt(Instant.now());
@@ -143,9 +176,17 @@ public class DisclosureIssuanceService {
         issuance.setVendorReference(gen.vendorReference());
         issuance.setSnapshot(ar.snapshot());
         issuance.setTriggerCocId(req != null ? req.triggerCocId() : null);
-        issuance.setResetTriggered(false);
         issuance.setRequestedBy(currentUser.id().orElse(null));
         issuance.setRequestedAt(Instant.now());
+
+        // CD re-disclosure: detect the TRID reset triggers against the prior CD (captured pre-save).
+        List<ResetReason> resetReasons = List.of();
+        if (kind == DisclosureKind.CLOSING_DISCLOSURE && priorCd != null) {
+            resetReasons = resetDetector.detect(
+                    priorCd, gen, ar.request().productDescription(), effectivePrepay);
+        }
+        issuance.setResetTriggered(!resetReasons.isEmpty());
+        issuance.setResetReasons(new ArrayList<>(resetReasons));
         DisclosureIssuance saved = issuanceRepo.save(issuance);
 
         DisclosureEvent event = new DisclosureEvent();
@@ -158,6 +199,17 @@ public class DisclosureIssuanceService {
         event.setOccurredAt(Instant.now());
         event.setDetail(Map.of("version", version));
         eventRepo.save(event);
+
+        if (!resetReasons.isEmpty()) {
+            DisclosureEvent resetEvent = new DisclosureEvent();
+            resetEvent.setLoanId(loanId);
+            resetEvent.setDisclosureId(saved.getId());
+            resetEvent.setEventType(DisclosureEventType.RESET_TRIGGERED);
+            resetEvent.setActor(currentUser.id().orElse(null));
+            resetEvent.setOccurredAt(Instant.now());
+            resetEvent.setDetail(Map.of("reasons", resetReasons.toString()));
+            eventRepo.save(resetEvent);
+        }
 
         return saved;
     }

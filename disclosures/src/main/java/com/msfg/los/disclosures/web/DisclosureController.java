@@ -38,6 +38,15 @@ public class DisclosureController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(body));
     }
 
+    @PostMapping("/api/loans/{loanId}/disclosures/closing-disclosure")
+    public ResponseEntity<ApiResponse<DisclosureResponse>> issueClosingDisclosure(
+            @PathVariable UUID loanId,
+            @RequestBody(required = false) IssueDisclosureRequest req) {
+        DisclosureResponse body = DisclosureResponse.from(
+                service.issue(loanId, DisclosureKind.CLOSING_DISCLOSURE, req));
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(body));
+    }
+
     @PostMapping("/api/loans/{loanId}/disclosures/{disclosureId}/receipt")
     public ApiResponse<DisclosureResponse> recordReceipt(
             @PathVariable UUID loanId,
