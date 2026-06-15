@@ -143,12 +143,17 @@ Exact schemas: see `/v3/api-docs`.
 - **Contacts** (processing — the loan's people roster)
   - `POST | GET | PATCH | DELETE /api/loans/{loanId}/contacts[/{contactId}]` — `{role, name, company, phone, email}`.
     `role` is the `ContactRole` enum (`LISTING_AGENT, SELLING_AGENT, ESCROW_OFFICER, TITLE_COMPANY, INSURANCE_AGENT, ATTORNEY, APPRAISER, OTHER` — maps 1:1 to your `CONTACT_ROLES` display strings). `name` required; PATCH is per-field; stable `ordinal` ordering.
+- **Disclosures** (TRID — Loan Estimate + Closing Disclosure; advisory timing/tolerance, stub-first vendor port)
+  - `GET …/disclosures/coverage` → `{covered, reasons[]}` (does TRID apply — gate the UI on it).
+  - `POST …/disclosures/loan-estimate` · `POST …/disclosures/closing-disclosure` → 201 `DisclosureResponse` (apr/finance-charge/TIP/total-of-payments, version, status, documentId, earliestConsummationDate, resetTriggered+resetReasons). The rendered form stores as a `LOAN_ESTIMATE`/`CLOSING_DISCLOSURE` document (download via the binary `…/documents/{id}/content`).
+  - `POST …/disclosures/{id}/receipt {receivedAt}` (flips receipt basis to ACTUAL) · `GET …/disclosures/timing` (`TimingResponse`: LE deadline, earliest consummation, revised-LE clock — **advisory**) · `GET …/disclosures/tolerance` (bucketed totals + good-faith CD-vs-LE comparison) · `GET …/disclosures[/{id}]` (history/detail).
+  - APR + regulated forms are computed by a **stub** vendor adapter (not regulator-grade; real DocMagic/IDS/Docutech + e-sign + UCD behind the port later). Fee rows gained optional `paidTo`/`consumerCanShop`/`onWrittenList` (drive tolerance buckets); loan gained optional `consummationDate` (via `PATCH /api/loans/{id}`).
 - **Admin** (platform)
   - `/api/admin/**` — org/tenant provisioning etc. (`PLATFORM_ADMIN` only).
 
 **✅ The full 1003 (URLA) is merged and live** — every screen in your build plan is buildable now (Specs 1–7).
 *Processing-stage modules: **Fees ✅ · Change of Circumstance ✅ · Document Manager ✅ · Pricing/Lock ✅ · AUS + Credit ✅ · Contacts ✅ — the frontend work-order is COMPLETE.**
-Coming next (additive): disclosures; plus small deferred bits — Details-of-Transaction/
+Disclosures ✅ shipped (TRID LE/CD).** Coming next (additive): real vendor adapters (DU/LPA/credit/disclosure onboarding) → AI milestone; plus small deferred bits — Details-of-Transaction/
 cash-to-close (Spec 6C), down-payment-source checkboxes, multi-lien/joint REO. Watch `/v3/api-docs` + `docs/ROADMAP.md`.*
 
 ## Design inputs (use these)
