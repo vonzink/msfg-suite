@@ -8,7 +8,6 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 
@@ -39,14 +38,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/org/**").hasRole("ADMIN")
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().denyAll())
-            .oauth2ResourceServer(o -> o.jwt(j -> j.jwtAuthenticationConverter(jwtAuthConverter())))
+            .oauth2ResourceServer(o -> o.jwt(j -> j.jwtAuthenticationConverter(new OrgScopedJwtAuthenticationConverter())))
             .addFilterAfter(tenantFilter, BearerTokenAuthenticationFilter.class);
         return http.build();
-    }
-
-    private JwtAuthenticationConverter jwtAuthConverter() {
-        JwtAuthenticationConverter conv = new JwtAuthenticationConverter();
-        conv.setJwtGrantedAuthoritiesConverter(new CognitoRolesConverter());
-        return conv;
     }
 }
