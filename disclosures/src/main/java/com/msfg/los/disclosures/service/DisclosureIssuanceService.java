@@ -65,6 +65,7 @@ public class DisclosureIssuanceService {
     private final TolerancePolicy tolerancePolicy;
     private final ResetDetector resetDetector;
     private final DisclosureIssuanceErrorRecorder errorRecorder;
+    private final RevisedLeClockService revisedLeClockService;
 
     public DisclosureIssuanceService(LoanService loanService,
                                      LoanAccessGuard accessGuard,
@@ -78,7 +79,8 @@ public class DisclosureIssuanceService {
                                      TenantContext tenantContext,
                                      TolerancePolicy tolerancePolicy,
                                      ResetDetector resetDetector,
-                                     DisclosureIssuanceErrorRecorder errorRecorder) {
+                                     DisclosureIssuanceErrorRecorder errorRecorder,
+                                     RevisedLeClockService revisedLeClockService) {
         this.loanService = loanService;
         this.accessGuard = accessGuard;
         this.assemblyService = assemblyService;
@@ -92,6 +94,7 @@ public class DisclosureIssuanceService {
         this.tolerancePolicy = tolerancePolicy;
         this.resetDetector = resetDetector;
         this.errorRecorder = errorRecorder;
+        this.revisedLeClockService = revisedLeClockService;
     }
 
     private UUID org() {
@@ -273,7 +276,9 @@ public class DisclosureIssuanceService {
                 ? null
                 : !consummationDate.isBefore(overall);
 
-        return new TimingResponse(le, cd, overall, consummationDate, satisfies, null);
+        LocalDate revisedLeDeadline = revisedLeClockService.revisedLeDeadline(loanId);
+
+        return new TimingResponse(le, cd, overall, consummationDate, satisfies, revisedLeDeadline);
     }
 
     /** Current good-faith tolerance view: live per-bucket totals + comparison vs the baseline LE. */

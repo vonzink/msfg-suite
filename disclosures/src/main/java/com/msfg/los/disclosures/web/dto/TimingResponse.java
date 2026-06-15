@@ -5,7 +5,8 @@ import java.time.LocalDate;
 /**
  * Loan-level TRID timing rollup: the latest-version earliest-consummation dates per kind, the
  * overall binding earliest, and whether the loan's set consummation date satisfies it.
- * {@code revisedLeDeadline} is null in this task; Task 11 wires the CoC revised-LE clock.
+ * {@code revisedLeDeadline} is the 3 general-business-day deadline to deliver a revised LE after the
+ * most recent accepted Change-of-Circumstance (1026.19(e)(3)(iv)/(e)(4)), or null if none accepted.
  */
 public record TimingResponse(
         LocalDate latestLeEarliestConsummation,

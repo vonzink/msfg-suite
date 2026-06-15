@@ -54,4 +54,15 @@ public class DisclosureTimingService {
         return calculator.addBusinessDays(
                 computedReceivedDate, 3, BusinessDayType.PRECISE, GeneralBusinessDayConfig.DEFAULT);
     }
+
+    /**
+     * Deadline to deliver a revised Loan Estimate after a valid changed circumstance — no later than
+     * 3 <em>general</em> business days after the creditor receives information sufficient to establish
+     * the changed circumstance (12 CFR 1026.19(e)(3)(iv)/(e)(4)). The clock runs from the date the
+     * changed circumstance is recognized (here, the accepted-CoC decision date).
+     */
+    public LocalDate revisedLeDeadline(LocalDate decisionDate) {
+        return calculator.addBusinessDays(
+                decisionDate, 3, BusinessDayType.GENERAL, GeneralBusinessDayConfig.DEFAULT);
+    }
 }
