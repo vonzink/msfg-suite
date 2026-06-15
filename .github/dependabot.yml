@@ -1,0 +1,38 @@
+version: 2
+updates:
+  # Gradle dependencies — covers the root build, the gradle/libs.versions.toml
+  # version catalog, and per-module build files that pin versions directly.
+  - package-ecosystem: gradle
+    directories:
+      - "/"
+      - "/*"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 10
+    groups:
+      gradle-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: build
+
+  # Keep the GitHub Actions used by the workflows pinned to current versions.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: ci

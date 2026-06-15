@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Least-privilege: the build only needs to read repository contents.
+permissions:
+  contents: read
+
+# Cancel superseded runs for the same ref (e.g. new pushes to a PR branch).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and Test (JDK 21)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          # Deliberately NOT setting `cache: gradle` here — gradle/actions/setup-gradle
+          # (below) owns build caching, and the two mechanisms interfere.
+
+      # Supply-chain hardening: fail if the committed Gradle wrapper JAR does
+      # not match a known-good published checksum.
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v6
+
+      # Configure Gradle for CI and own all Gradle User Home caching.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      # Full build incl. Testcontainers integration tests. ubuntu-latest ships
+      # with Docker, so the Postgres 16 testcontainers ITs run unchanged.
+      - name: Build
+        run: ./gradlew build --no-daemon --stacktrace
