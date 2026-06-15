@@ -14,8 +14,8 @@ subprojects {
     repositories { mavenCentral() }
 
     the<io.spring.gradle.dependencymanagement.dsl.DependencyManagementExtension>().imports {
-        mavenBom("org.springframework.boot:spring-boot-dependencies:3.3.5")
-        mavenBom("org.testcontainers:testcontainers-bom:1.20.3")
+        mavenBom("org.springframework.boot:spring-boot-dependencies:3.3.13")
+        mavenBom("org.testcontainers:testcontainers-bom:1.21.4")
     }
 
     dependencies {
