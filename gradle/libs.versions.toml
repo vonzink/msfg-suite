@@ -1,7 +1,7 @@
 [versions]
-springBoot = "3.3.5"
-springDepMgmt = "1.1.6"
-springdoc = "2.6.0"
+springBoot = "3.5.15"
+springDepMgmt = "1.1.7"
+springdoc = "2.8.17"
 testcontainers = "1.20.3"
 
 [libraries]
