@@ -6,21 +6,35 @@ import com.msfg.los.disclosures.domain.DisclosureEventType;
 import com.msfg.los.disclosures.domain.DisclosureIssuance;
 import com.msfg.los.disclosures.domain.DisclosureKind;
 import com.msfg.los.disclosures.domain.DisclosureStatus;
+import com.msfg.los.disclosures.domain.DisclosureCostRow;
+import com.msfg.los.disclosures.domain.ReceivedBasis;
 import com.msfg.los.disclosures.repo.DisclosureEventRepository;
 import com.msfg.los.disclosures.repo.DisclosureIssuanceRepository;
 import com.msfg.los.disclosures.service.DisclosureAssemblyService.AssemblyResult;
+import com.msfg.los.disclosures.tolerance.ToleranceComparison;
+import com.msfg.los.disclosures.tolerance.TolerancePolicy;
 import com.msfg.los.disclosures.web.dto.IssueDisclosureRequest;
+import com.msfg.los.disclosures.web.dto.TimingResponse;
+import com.msfg.los.disclosures.web.dto.ToleranceResponse;
 import com.msfg.los.documents.domain.Document;
 import com.msfg.los.documents.domain.DocumentType;
 import com.msfg.los.documents.service.DocumentService;
+import com.msfg.los.loan.domain.Loan;
 import com.msfg.los.loan.service.LoanAccessGuard;
 import com.msfg.los.loan.service.LoanService;
+import com.msfg.los.platform.error.NotFoundException;
 import com.msfg.los.platform.security.CurrentUser;
+import com.msfg.los.platform.tenancy.TenantContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -45,6 +59,8 @@ public class DisclosureIssuanceService {
     private final DisclosureIssuanceRepository issuanceRepo;
     private final DisclosureEventRepository eventRepo;
     private final CurrentUser currentUser;
+    private final TenantContext tenantContext;
+    private final TolerancePolicy tolerancePolicy;
 
     public DisclosureIssuanceService(LoanService loanService,
                                      LoanAccessGuard accessGuard,
@@ -54,7 +70,9 @@ public class DisclosureIssuanceService {
                                      DisclosureTimingService timingService,
                                      DisclosureIssuanceRepository issuanceRepo,
                                      DisclosureEventRepository eventRepo,
-                                     CurrentUser currentUser) {
+                                     CurrentUser currentUser,
+                                     TenantContext tenantContext,
+                                     TolerancePolicy tolerancePolicy) {
         this.loanService = loanService;
         this.accessGuard = accessGuard;
         this.assemblyService = assemblyService;
@@ -64,6 +82,12 @@ public class DisclosureIssuanceService {
         this.issuanceRepo = issuanceRepo;
         this.eventRepo = eventRepo;
         this.currentUser = currentUser;
+        this.tenantContext = tenantContext;
+        this.tolerancePolicy = tolerancePolicy;
+    }
+
+    private UUID org() {
+        return tenantContext.orgId().orElseThrow(() -> new NotFoundException("Tenant", "current"));
     }
 
     @Transactional
@@ -136,5 +160,112 @@ public class DisclosureIssuanceService {
         eventRepo.save(event);
 
         return saved;
+    }
+
+    /**
+     * Records actual consumer receipt of an issued disclosure: flips the basis to {@code ACTUAL},
+     * sets {@code computedReceivedDate} to the stated date, marks the issuance {@code RECEIVED}, and
+     * recomputes the earliest-consummation date for a CD (3 precise business days after receipt). An
+     * LE's earliest-consummation is keyed to delivery, not receipt, so it is left as-is. Append-only
+     * {@link DisclosureEvent} audit row written.
+     */
+    @Transactional
+    public DisclosureIssuance recordReceipt(UUID loanId, UUID disclosureId, LocalDate receivedAt) {
+        accessGuard.assertCanAccess(loanService.get(loanId));
+        DisclosureIssuance issuance = loadInLoan(loanId, disclosureId);
+
+        issuance.setReceivedAt(receivedAt.atStartOfDay(ZoneOffset.UTC).toInstant());
+        issuance.setReceivedBasis(ReceivedBasis.ACTUAL);
+        issuance.setComputedReceivedDate(receivedAt);
+        issuance.setStatus(DisclosureStatus.RECEIVED);
+        if (issuance.getKind() == DisclosureKind.CLOSING_DISCLOSURE) {
+            issuance.setEarliestConsummationDate(timingService.earliestConsummationForCd(receivedAt));
+        }
+        DisclosureIssuance saved = issuanceRepo.save(issuance);
+
+        DisclosureEvent event = new DisclosureEvent();
+        event.setLoanId(loanId);
+        event.setDisclosureId(saved.getId());
+        event.setEventType(DisclosureEventType.RECEIPT_RECORDED);
+        event.setActor(currentUser.id().orElse(null));
+        event.setOccurredAt(Instant.now());
+        event.setDetail(Map.of("receivedAt", receivedAt.toString()));
+        eventRepo.save(event);
+
+        return saved;
+    }
+
+    /** Loan-level TRID timing rollup across the latest LE and latest CD. */
+    @Transactional(readOnly = true)
+    public TimingResponse timing(UUID loanId) {
+        accessGuard.assertCanAccess(loanService.get(loanId));
+
+        LocalDate le = issuanceRepo
+                .findTopByLoanIdAndKindOrderByDisclosureVersionDesc(loanId, DisclosureKind.LOAN_ESTIMATE)
+                .map(DisclosureIssuance::getEarliestConsummationDate).orElse(null);
+        LocalDate cd = issuanceRepo
+                .findTopByLoanIdAndKindOrderByDisclosureVersionDesc(loanId, DisclosureKind.CLOSING_DISCLOSURE)
+                .map(DisclosureIssuance::getEarliestConsummationDate).orElse(null);
+
+        LocalDate overall;
+        if (le == null) {
+            overall = cd;
+        } else if (cd == null) {
+            overall = le;
+        } else {
+            overall = le.isAfter(cd) ? le : cd;
+        }
+
+        LocalDate consummationDate = loanService.get(loanId).getConsummationDate();
+        Boolean satisfies = (consummationDate == null || overall == null)
+                ? null
+                : !consummationDate.isBefore(overall);
+
+        return new TimingResponse(le, cd, overall, consummationDate, satisfies, null);
+    }
+
+    /** Current good-faith tolerance view: live per-bucket totals + comparison vs the baseline LE. */
+    @Transactional(readOnly = true)
+    public ToleranceResponse tolerance(UUID loanId) {
+        accessGuard.assertCanAccess(loanService.get(loanId));
+
+        List<DisclosureCostRow> currentRows =
+                assemblyService.assemble(loanId, DisclosureKind.LOAN_ESTIMATE).request().costTable();
+
+        Map<String, BigDecimal> bucketTotals = new LinkedHashMap<>();
+        for (DisclosureCostRow row : currentRows) {
+            String key = row.bucket().name();
+            BigDecimal amount = row.amount() == null ? BigDecimal.ZERO : row.amount();
+            bucketTotals.merge(key, amount, BigDecimal::add);
+        }
+        bucketTotals.replaceAll((k, v) -> v.setScale(2, RoundingMode.HALF_UP));
+
+        List<DisclosureCostRow> baseline = issuanceRepo
+                .findTopByLoanIdAndKindOrderByDisclosureVersionDesc(loanId, DisclosureKind.LOAN_ESTIMATE)
+                .map(i -> i.getSnapshot().costRows()).orElse(null);
+        ToleranceComparison comparison =
+                baseline == null ? null : tolerancePolicy.compare(baseline, currentRows);
+
+        return new ToleranceResponse(bucketTotals, comparison);
+    }
+
+    /** Full issuance history for a loan, newest first. */
+    @Transactional(readOnly = true)
+    public List<DisclosureIssuance> history(UUID loanId) {
+        accessGuard.assertCanAccess(loanService.get(loanId));
+        return issuanceRepo.findByLoanIdOrderByRequestedAtDescIdDesc(loanId);
+    }
+
+    /** One issuance, tenant + loan scoped (404 cross-tenant or cross-loan). */
+    @Transactional(readOnly = true)
+    public DisclosureIssuance get(UUID loanId, UUID disclosureId) {
+        accessGuard.assertCanAccess(loanService.get(loanId));
+        return loadInLoan(loanId, disclosureId);
+    }
+
+    private DisclosureIssuance loadInLoan(UUID loanId, UUID disclosureId) {
+        return issuanceRepo.findByIdAndOrgId(disclosureId, org())
+                .filter(i -> i.getLoanId().equals(loanId))
+                .orElseThrow(() -> new NotFoundException("Disclosure", disclosureId));
     }
 }
