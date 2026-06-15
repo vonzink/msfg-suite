@@ -263,12 +263,17 @@ public class DisclosureIssuanceService {
         Loan loan = loanService.get(loanId);
         accessGuard.assertCanAccess(loan);
 
+        // Status-filtered: timing reflects only SUCCESSFULLY-ISSUED disclosures. An ERROR row carries
+        // the highest disclosure_version with delivered_at/earliest null — picking it as the latest LE
+        // would NPE the leDeliveredOnTime lambda below (getDeliveredAt() == null) → 500 on GET /timing.
         java.util.Optional<DisclosureIssuance> latestLe = issuanceRepo
-                .findTopByLoanIdAndKindOrderByDisclosureVersionDesc(loanId, DisclosureKind.LOAN_ESTIMATE);
+                .findTopByLoanIdAndKindAndStatusInOrderByDisclosureVersionDesc(
+                        loanId, DisclosureKind.LOAN_ESTIMATE, ISSUED_STATUSES);
 
         LocalDate le = latestLe.map(DisclosureIssuance::getEarliestConsummationDate).orElse(null);
         LocalDate cd = issuanceRepo
-                .findTopByLoanIdAndKindOrderByDisclosureVersionDesc(loanId, DisclosureKind.CLOSING_DISCLOSURE)
+                .findTopByLoanIdAndKindAndStatusInOrderByDisclosureVersionDesc(
+                        loanId, DisclosureKind.CLOSING_DISCLOSURE, ISSUED_STATUSES)
                 .map(DisclosureIssuance::getEarliestConsummationDate).orElse(null);
 
         LocalDate overall;
@@ -293,7 +298,8 @@ public class DisclosureIssuanceService {
         LocalDate appDate = loan.getCreatedAt().atZone(ZoneOffset.UTC).toLocalDate();
         LocalDate leDeliveryDeadline = timingService.leDeliveryDeadline(appDate);
         Boolean leDeliveredOnTime = latestLe
-                .map(i -> !i.getDeliveredAt().atZone(ZoneOffset.UTC).toLocalDate().isAfter(leDeliveryDeadline))
+                .map(DisclosureIssuance::getDeliveredAt)
+                .map(d -> !d.atZone(ZoneOffset.UTC).toLocalDate().isAfter(leDeliveryDeadline))
                 .orElse(null);
 
         return new TimingResponse(le, cd, overall, consummationDate, satisfies, revisedLeDeadline,

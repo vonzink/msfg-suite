@@ -213,6 +213,37 @@ class DisclosureReadIT extends AbstractIntegrationTest {
     }
 
     /**
+     * RE-REVIEW DEFECT: /timing must IGNORE ERROR rows. A failed LE issuance writes an ERROR row
+     * (highest disclosure_version, delivered_at=null, earliest_consummation_date=null). The unfiltered
+     * latest-LE lookup used to pick that ERROR row, so leDeliveredOnTime did
+     * {@code errorRow.getDeliveredAt().atZone(...)} → NPE → 500 on GET /timing.
+     *
+     * <p>Discriminating sequence: issue a SUCCESSFUL LE (v1, delivered_at + earliest set), then
+     * JDBC-insert an ERROR LE row at a HIGHER version (v99, delivered_at null) for the same loan/org.
+     * Buggy code reads the ERROR row as the latest LE → NPE/500. Fixed (status-filtered latestLe/cd),
+     * /timing reflects only the SUCCESSFUL LE → 200, leDeliveryDeadline present, leDeliveredOnTime non-null.
+     */
+    @Test
+    void timingIgnoresErrorLeRow() throws Exception {
+        String lo = UUID.randomUUID().toString();
+        String loanId = createLoan(lo);
+        addFees(lo, loanId);
+        issueLe(lo, loanId); // SUCCESSFUL LE v1 — delivered_at + earliest_consummation_date set
+
+        // Failed-issuance shape: ERROR LE at the HIGHEST version, delivered_at + earliest left NULL
+        // by default. Mirrors what DisclosureIssuanceErrorRecorder persists on a vendor outage.
+        jdbc.update(
+                "insert into disclosure_issuance (id, org_id, loan_id, kind, disclosure_version, status) "
+                        + "values (?::uuid, ?::uuid, ?::uuid, 'LOAN_ESTIMATE', 99, 'ERROR')",
+                UUID.randomUUID().toString(), DEFAULT_ORG, loanId);
+
+        mvc.perform(get("/api/loans/{loanId}/disclosures/timing", loanId).with(as(lo, "ROLE_LO")))
+                .andExpect(status().isOk()) // was 500 (NPE) before the status filter
+                .andExpect(jsonPath("$.data.leDeliveryDeadline", notNullValue()))
+                .andExpect(jsonPath("$.data.leDeliveredOnTime", notNullValue()));
+    }
+
+    /**
      * BLOCKER 2 (HIGH): /tolerance must measure the CD's ACTUAL charges (its snapshot) against the
      * latest good-faith LE baseline (TRID 1026.19(e)(3)) — NOT the live LE re-assembly.
      *
