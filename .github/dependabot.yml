@@ -23,6 +23,11 @@ updates:
       # (unknown_error). Minor/patch updates still flow through the group above.
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      # Spring Boot minors can carry behavior changes — 3.5.x broke an aus-module
+      # test — so pin to the current 3.3.x patch line (still gets patches) and
+      # upgrade deliberately. Remove this to take the next Spring Boot minor.
+      - dependency-name: "org.springframework.boot*"
+        update-types: ["version-update:semver-minor"]
     commit-message:
       prefix: build
 
