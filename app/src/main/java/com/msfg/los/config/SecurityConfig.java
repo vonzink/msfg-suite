@@ -1,5 +1,6 @@
 package com.msfg.los.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.msfg.los.platform.tenancy.TenantContextFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,17 +20,21 @@ import org.springframework.security.web.SecurityFilterChain;
 public class SecurityConfig {
 
     private final TenantContextFilter tenantFilter;
+    private final ObjectMapper objectMapper;
 
-    public SecurityConfig(TenantContextFilter tenantFilter) {
+    public SecurityConfig(TenantContextFilter tenantFilter, ObjectMapper objectMapper) {
         this.tenantFilter = tenantFilter;
+        this.objectMapper = objectMapper;
     }
 
     @Bean
     SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        ApiErrorAuthenticationEntryPoint entryPoint = new ApiErrorAuthenticationEntryPoint(objectMapper);
         http
             .cors(org.springframework.security.config.Customizer.withDefaults())
             .csrf(c -> c.disable())
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .exceptionHandling(e -> e.authenticationEntryPoint(entryPoint))
             .authorizeHttpRequests(reg -> reg
                 .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
@@ -38,7 +43,9 @@ public class SecurityConfig {
                 .requestMatchers("/api/org/**").hasRole("ADMIN")
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().denyAll())
-            .oauth2ResourceServer(o -> o.jwt(j -> j.jwtAuthenticationConverter(new OrgScopedJwtAuthenticationConverter())))
+            .oauth2ResourceServer(o -> o
+                .authenticationEntryPoint(entryPoint)
+                .jwt(j -> j.jwtAuthenticationConverter(new OrgScopedJwtAuthenticationConverter())))
             .addFilterAfter(tenantFilter, BearerTokenAuthenticationFilter.class);
         return http.build();
     }
