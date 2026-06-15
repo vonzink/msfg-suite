@@ -21,7 +21,16 @@ public class TenantContextFilter extends OncePerRequestFilter {
             var auth = SecurityContextHolder.getContext().getAuthentication();
             if (auth instanceof JwtAuthenticationToken jwt) {
                 Object claim = jwt.getToken().getClaim("org_id");
-                if (claim != null) TenantContextHolder.set(UUID.fromString(claim.toString()));
+                if (claim != null && !claim.toString().isBlank()) {
+                    try {
+                        TenantContextHolder.set(UUID.fromString(claim.toString().trim()));
+                    } catch (IllegalArgumentException ignored) {
+                        // Malformed org_id: leave tenant unset (OrgTenantResolver -> NIL -> reads match no rows).
+                        // The authoritative fail-closed reject for the real non-local JWT path is
+                        // OrgScopedJwtAuthenticationConverter; this guard only prevents a raw 500 if any path
+                        // (e.g. a test post-processor) ever supplies a present-but-invalid claim.
+                    }
+                }
             }
             chain.doFilter(req, res);
         } finally {
