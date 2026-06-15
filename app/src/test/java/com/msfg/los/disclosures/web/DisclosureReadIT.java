@@ -1,10 +1,12 @@
 package com.msfg.los.disclosures.web;
 
 import com.jayway.jsonpath.JsonPath;
+import com.msfg.los.disclosures.timing.BusinessDayCalculator;
 import com.msfg.los.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
@@ -28,6 +30,12 @@ class DisclosureReadIT extends AbstractIntegrationTest {
 
     @Autowired
     MockMvc mvc;
+
+    @Autowired
+    JdbcTemplate jdbc;
+
+    @Autowired
+    BusinessDayCalculator businessDayCalculator;
 
     private RequestPostProcessor as(String sub, String role) {
         return as(sub, role, DEFAULT_ORG);
@@ -73,6 +81,37 @@ class DisclosureReadIT extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isCreated()).andReturn();
         return JsonPath.read(res.getResponse().getContentAsString(), "$.data.id");
+    }
+
+    /** Section-A origination fee (ZERO bucket) + Section-E UNAFFILIATED fee (TEN_PERCENT bucket); returns [zeroId, tenId]. */
+    private String[] addTolerableFees(String loSub, String loanId) throws Exception {
+        var zero = mvc.perform(post("/api/loans/{id}/fees", loanId).with(as(loSub, "ROLE_LO"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"section\":\"A\",\"label\":\"Origination Fee\",\"amount\":1000,"
+                                + "\"paidTo\":\"CREDITOR\"}"))
+                .andExpect(status().isCreated()).andReturn();
+        var ten = mvc.perform(post("/api/loans/{id}/fees", loanId).with(as(loSub, "ROLE_LO"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"section\":\"E\",\"label\":\"Title Service Fee\",\"amount\":1000,"
+                                + "\"paidTo\":\"UNAFFILIATED\"}"))
+                .andExpect(status().isCreated()).andReturn();
+        return new String[] {
+                JsonPath.read(zero.getResponse().getContentAsString(), "$.data.id"),
+                JsonPath.read(ten.getResponse().getContentAsString(), "$.data.id")};
+    }
+
+    private void patchFeeAmount(String loSub, String loanId, String feeId, int amount) throws Exception {
+        mvc.perform(patch("/api/loans/{loanId}/fees/{feeId}", loanId, feeId).with(as(loSub, "ROLE_LO"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\":" + amount + "}"))
+                .andExpect(status().isOk());
+    }
+
+    private void issueCd(String loSub, String loanId) throws Exception {
+        mvc.perform(post("/api/loans/{loanId}/disclosures/closing-disclosure", loanId)
+                        .with(as(loSub, "ROLE_LO"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isCreated());
     }
 
     @Test
@@ -171,5 +210,71 @@ class DisclosureReadIT extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"receivedAt\":\"2026-07-15\"}"))
                 .andExpect(status().isNotFound());
+    }
+
+    /**
+     * BLOCKER 2 (HIGH): /tolerance must measure the CD's ACTUAL charges (its snapshot) against the
+     * latest good-faith LE baseline (TRID 1026.19(e)(3)) — NOT the live LE re-assembly.
+     *
+     * <p>Discriminating sequence: issue LE (baseline zero=1000, ten=1000) → RAISE both fees → issue
+     * CD (snapshots the raised zero=1500, ten=1200) → then LOWER the live fees back to 1000/1000.
+     * The CORRECT current set is the CD's snapshot (raised), so the comparison is OUT of tolerance
+     * (zeroExcess 500, tenExcess 100). The OLD LE-vs-LE wiring uses the live re-assembly as "current"
+     * — which is now back at baseline — and would wrongly report withinTolerance=true / zero excess.
+     */
+    @Test
+    void toleranceComparesCdSnapshotNotLiveLe() throws Exception {
+        String lo = UUID.randomUUID().toString();
+        String loanId = createLoan(lo);
+        String[] ids = addTolerableFees(lo, loanId);
+        String zeroFee = ids[0];
+        String tenFee = ids[1];
+
+        // Baseline LE snapshots zero=1000, ten=1000.
+        issueLe(lo, loanId);
+
+        // Raise the fees, then issue the CD which snapshots the RAISED amounts (zero=1500, ten=1200).
+        patchFeeAmount(lo, loanId, zeroFee, 1500); // zero-tolerance: +500 over baseline
+        patchFeeAmount(lo, loanId, tenFee, 1200);  // ten aggregate 1200 > 1100 (110% of 1000)
+        issueCd(lo, loanId);
+
+        // Lower the live fees back to baseline. Only the CD snapshot still carries the overage now —
+        // a live re-assembly (the bug) would see 1000/1000 and report within tolerance.
+        patchFeeAmount(lo, loanId, zeroFee, 1000);
+        patchFeeAmount(lo, loanId, tenFee, 1000);
+
+        mvc.perform(get("/api/loans/{loanId}/disclosures/tolerance", loanId).with(as(lo, "ROLE_LO")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.comparisonVsBaselineLe.withinTolerance").value(false))
+                .andExpect(jsonPath("$.data.comparisonVsBaselineLe.zeroBucketExcess").value(500.0))
+                .andExpect(jsonPath("$.data.comparisonVsBaselineLe.tenPercentExcess").value(100.0));
+    }
+
+    /**
+     * BLOCKER 3 (HIGH): the LE 3-general-business-day delivery deadline (1026.19(e)(1)(iii)) must be
+     * surfaced on /timing. Deadline = application date (loan createdAt, UTC) + 3 GENERAL business
+     * days, recomputed in-test via the same BusinessDayCalculator; leDeliveredOnTime is non-null once
+     * an LE exists.
+     */
+    @Test
+    void timingSurfacesLeDeliveryDeadline() throws Exception {
+        String lo = UUID.randomUUID().toString();
+        String loanId = createLoan(lo);
+        addFees(lo, loanId);
+        issueLe(lo, loanId);
+
+        // Application-date proxy = loan createdAt (UTC date). Recompute the expected deadline independently.
+        java.time.LocalDate appDate = jdbc.queryForObject(
+                "select (created_at at time zone 'UTC')::date from loan where id = ?::uuid",
+                java.time.LocalDate.class, loanId);
+        java.time.LocalDate expected = businessDayCalculator.addBusinessDays(
+                appDate, 3,
+                com.msfg.los.disclosures.domain.BusinessDayType.GENERAL,
+                com.msfg.los.disclosures.timing.GeneralBusinessDayConfig.DEFAULT);
+
+        mvc.perform(get("/api/loans/{loanId}/disclosures/timing", loanId).with(as(lo, "ROLE_LO")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.leDeliveryDeadline").value(expected.toString()))
+                .andExpect(jsonPath("$.data.leDeliveredOnTime", notNullValue()));
     }
 }

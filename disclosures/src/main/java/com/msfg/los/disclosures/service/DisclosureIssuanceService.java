@@ -67,6 +67,10 @@ public class DisclosureIssuanceService {
     private final DisclosureIssuanceErrorRecorder errorRecorder;
     private final RevisedLeClockService revisedLeClockService;
 
+    /** "Successfully issued" statuses — excludes ERROR rows from prior-CD and baseline-LE lookups. */
+    private static final List<DisclosureStatus> ISSUED_STATUSES =
+            List.of(DisclosureStatus.SENT, DisclosureStatus.RECEIVED);
+
     public DisclosureIssuanceService(LoanService loanService,
                                      LoanAccessGuard accessGuard,
                                      DisclosureAssemblyService assemblyService,
@@ -113,10 +117,13 @@ public class DisclosureIssuanceService {
                 ? req.prepaymentPenalty()
                 : ar.request().prepaymentPenalty();
 
-        // For a CD, capture the prior CD BEFORE persisting the new one so reset detection compares
-        // against the last issued version, not against the row we are about to save.
+        // For a CD, capture the last SUCCESSFULLY-ISSUED prior CD BEFORE persisting the new one so
+        // reset detection compares against the last good CD, not the row we are about to save and
+        // NOT a poisoned ERROR row (apr=null) that would NPE the comparison. The version counter
+        // below still walks every row (including ERROR), so disclosure_version stays gap-tolerant.
         DisclosureIssuance priorCd = kind == DisclosureKind.CLOSING_DISCLOSURE
-                ? issuanceRepo.findTopByLoanIdAndKindOrderByDisclosureVersionDesc(loanId, kind).orElse(null)
+                ? issuanceRepo.findTopByLoanIdAndKindAndStatusInOrderByDisclosureVersionDesc(
+                        loanId, DisclosureKind.CLOSING_DISCLOSURE, ISSUED_STATUSES).orElse(null)
                 : null;
 
         DisclosureGenerationResult gen;
@@ -151,7 +158,7 @@ public class DisclosureIssuanceService {
             throw e;
         }
 
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
         LocalDate computedReceived = timingService.constructiveReceived(today);
         LocalDate earliest = kind == DisclosureKind.LOAN_ESTIMATE
                 ? timingService.earliestConsummationForLe(today)
@@ -253,11 +260,13 @@ public class DisclosureIssuanceService {
     /** Loan-level TRID timing rollup across the latest LE and latest CD. */
     @Transactional(readOnly = true)
     public TimingResponse timing(UUID loanId) {
-        accessGuard.assertCanAccess(loanService.get(loanId));
+        Loan loan = loanService.get(loanId);
+        accessGuard.assertCanAccess(loan);
 
-        LocalDate le = issuanceRepo
-                .findTopByLoanIdAndKindOrderByDisclosureVersionDesc(loanId, DisclosureKind.LOAN_ESTIMATE)
-                .map(DisclosureIssuance::getEarliestConsummationDate).orElse(null);
+        java.util.Optional<DisclosureIssuance> latestLe = issuanceRepo
+                .findTopByLoanIdAndKindOrderByDisclosureVersionDesc(loanId, DisclosureKind.LOAN_ESTIMATE);
+
+        LocalDate le = latestLe.map(DisclosureIssuance::getEarliestConsummationDate).orElse(null);
         LocalDate cd = issuanceRepo
                 .findTopByLoanIdAndKindOrderByDisclosureVersionDesc(loanId, DisclosureKind.CLOSING_DISCLOSURE)
                 .map(DisclosureIssuance::getEarliestConsummationDate).orElse(null);
@@ -271,23 +280,53 @@ public class DisclosureIssuanceService {
             overall = le.isAfter(cd) ? le : cd;
         }
 
-        LocalDate consummationDate = loanService.get(loanId).getConsummationDate();
+        LocalDate consummationDate = loan.getConsummationDate();
         Boolean satisfies = (consummationDate == null || overall == null)
                 ? null
                 : !consummationDate.isBefore(overall);
 
         LocalDate revisedLeDeadline = revisedLeClockService.revisedLeDeadline(loanId);
 
-        return new TimingResponse(le, cd, overall, consummationDate, satisfies, revisedLeDeadline);
+        // Initial-LE delivery deadline (1026.19(e)(1)(iii)): 3 general business days after application.
+        // v1 proxies the application date with the loan's createdAt (UTC). leDeliveredOnTime compares
+        // the latest LE's deliveredAt (UTC date) against that deadline; null when no LE issued.
+        LocalDate appDate = loan.getCreatedAt().atZone(ZoneOffset.UTC).toLocalDate();
+        LocalDate leDeliveryDeadline = timingService.leDeliveryDeadline(appDate);
+        Boolean leDeliveredOnTime = latestLe
+                .map(i -> !i.getDeliveredAt().atZone(ZoneOffset.UTC).toLocalDate().isAfter(leDeliveryDeadline))
+                .orElse(null);
+
+        return new TimingResponse(le, cd, overall, consummationDate, satisfies, revisedLeDeadline,
+                leDeliveryDeadline, leDeliveredOnTime);
     }
 
-    /** Current good-faith tolerance view: live per-bucket totals + comparison vs the baseline LE. */
+    /**
+     * Good-faith tolerance view. TRID 1026.19(e)(3) measures the CD's <em>actual</em> charges against
+     * the latest good-faith LE baseline:
+     * <ul>
+     *   <li><b>baseline</b> = the latest successfully-issued LE's snapshot cost rows. A valid revised
+     *       LE re-baselines (we keep the LATEST good LE, not version 1). Null when no LE issued yet.</li>
+     *   <li><b>current</b> = the latest successfully-issued CD's snapshot cost rows when one exists
+     *       (the actual charges that matter); otherwise the live LE re-assembly as an advisory
+     *       pre-CD view of where the numbers stand right now.</li>
+     * </ul>
+     * Bucket totals are grouped on the CURRENT set; the comparison is null until a baseline LE exists.
+     */
     @Transactional(readOnly = true)
     public ToleranceResponse tolerance(UUID loanId) {
         accessGuard.assertCanAccess(loanService.get(loanId));
 
-        List<DisclosureCostRow> currentRows =
-                assemblyService.assemble(loanId, DisclosureKind.LOAN_ESTIMATE).request().costTable();
+        List<DisclosureCostRow> baseline = issuanceRepo
+                .findTopByLoanIdAndKindAndStatusInOrderByDisclosureVersionDesc(
+                        loanId, DisclosureKind.LOAN_ESTIMATE, ISSUED_STATUSES)
+                .map(i -> i.getSnapshot().costRows()).orElse(null);
+
+        List<DisclosureCostRow> currentRows = issuanceRepo
+                .findTopByLoanIdAndKindAndStatusInOrderByDisclosureVersionDesc(
+                        loanId, DisclosureKind.CLOSING_DISCLOSURE, ISSUED_STATUSES)
+                .map(i -> i.getSnapshot().costRows())
+                .orElseGet(() -> assemblyService.assemble(loanId, DisclosureKind.LOAN_ESTIMATE)
+                        .request().costTable());
 
         Map<String, BigDecimal> bucketTotals = new LinkedHashMap<>();
         for (DisclosureCostRow row : currentRows) {
@@ -297,9 +336,6 @@ public class DisclosureIssuanceService {
         }
         bucketTotals.replaceAll((k, v) -> v.setScale(2, RoundingMode.HALF_UP));
 
-        List<DisclosureCostRow> baseline = issuanceRepo
-                .findTopByLoanIdAndKindOrderByDisclosureVersionDesc(loanId, DisclosureKind.LOAN_ESTIMATE)
-                .map(i -> i.getSnapshot().costRows()).orElse(null);
         ToleranceComparison comparison =
                 baseline == null ? null : tolerancePolicy.compare(baseline, currentRows);
 

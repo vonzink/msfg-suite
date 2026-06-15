@@ -181,4 +181,42 @@ class ClosingDisclosureIT extends AbstractIntegrationTest {
                         .content("{}"))
                 .andExpect(status().isNotFound());
     }
+
+    /**
+     * BLOCKER 1 (CRITICAL): an ERROR CD row (apr=null) at a higher disclosure_version must NOT poison
+     * prior-CD selection. The next valid CD must compare against the last SUCCESSFULLY-issued CD (v1),
+     * not the ERROR row — otherwise priorCd.getApr() is null and reset detection NPEs (500).
+     *
+     * <p>Sequence: issue a valid CD v1 → JDBC-insert an ERROR CD row (apr=null, version 99) → change
+     * the product and issue a valid CD → assert 201, resetTriggered true with PRODUCT_CHANGED, no 500.
+     */
+    @Test
+    void errorCdRow_doesNotPoisonPriorCdSelection() throws Exception {
+        String lo = UUID.randomUUID().toString();
+        String loanId = createLoan(lo);
+        addZeroBucketFee(lo, loanId, 1200);
+
+        // v1 — valid baseline CD (CONVENTIONAL).
+        String v1 = postCd(lo, loanId, "{}");
+        assertThat((Integer) JsonPath.read(v1, "$.data.version")).isEqualTo(1);
+
+        // Inject an ERROR CD row with apr=null at a higher version — the shape the recorder persists
+        // on a vendor failure. findTopByLoanIdAndKindOrderByDisclosureVersionDesc would return THIS.
+        jdbc.update(
+                "insert into disclosure_issuance (id, org_id, loan_id, kind, disclosure_version, status) "
+                        + "values (?::uuid, ?::uuid, ?::uuid, 'CLOSING_DISCLOSURE', 99, 'ERROR')",
+                UUID.randomUUID().toString(), DEFAULT_ORG, loanId);
+
+        // Change the product, then issue a valid CD. With the bug this NPEs (compares against the
+        // ERROR row's null apr) → 500. Fixed, it compares against the last GOOD CD (v1) → PRODUCT_CHANGED.
+        mvc.perform(patch("/api/loans/{id}", loanId).with(as(lo, "ROLE_LO"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"mortgageType\":\"FHA\"}"))
+                .andExpect(status().isOk());
+
+        String next = postCd(lo, loanId, "{}");
+        assertThat((Boolean) JsonPath.read(next, "$.data.resetTriggered")).isTrue();
+        assertThat((java.util.List<String>) JsonPath.read(next, "$.data.resetReasons"))
+                .contains("PRODUCT_CHANGED");
+    }
 }

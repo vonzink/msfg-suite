@@ -44,9 +44,15 @@ public class ResetDetector {
         List<ResetReason> reasons = new ArrayList<>();
 
         // ── APR accuracy: 1026.22(a) symmetric tolerance band, with a5(ii) overstatement relief ──
+        // Defense-in-depth: an ERROR-row prior CD carries a null APR/finance-charge. If either side
+        // is null we cannot measure APR accuracy — skip the APR check (still evaluate product +
+        // prepay below). The service-layer fix already excludes ERROR rows from the prior-CD lookup;
+        // this guards the detector itself against a null reaching it by any path.
+        boolean aprComparable = priorCd.getApr() != null && newResult.apr() != null;
         BigDecimal band = newResult.aprIrregularBasis() ? BAND_IRREGULAR : BAND_REGULAR;
-        BigDecimal delta = newResult.apr().subtract(priorCd.getApr()); // actual − disclosed
-        if (delta.abs().compareTo(band) > 0) {
+        BigDecimal delta = aprComparable
+                ? newResult.apr().subtract(priorCd.getApr()) : null; // actual − disclosed
+        if (aprComparable && delta.abs().compareTo(band) > 0) {
             // Outside the band. Re-disclose UNLESS pure overstatement relief clearly applies:
             // disclosed APR was overstated (delta < 0) AND the finance charge was also overstated
             // (new finance charge <= prior CD's) → deemed accurate per 1026.22(a)(5)(ii).

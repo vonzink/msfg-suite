@@ -134,4 +134,23 @@ class ResetDetectorTest {
 
         assertThat(reasons).isEmpty();
     }
+
+    /**
+     * Defense-in-depth (Blocker 1): a prior CD with a null APR (an ERROR row's shape) must NOT NPE
+     * the detector. The APR check is skipped, but product/prepay are still evaluated — here the
+     * product changed, so PRODUCT_CHANGED is still flagged and no exception is thrown.
+     */
+    @Test
+    void priorCdNullApr_skipsAprCheck_stillEvaluatesProduct() {
+        DisclosureIssuance errorPrior = priorCd("6.500", "100000.00", "CONVENTIONAL PURCHASE", false);
+        errorPrior.setApr(null);          // ERROR-row shape
+        errorPrior.setFinanceCharge(null);
+
+        List<ResetReason> reasons = new ResetDetector().detect(
+                errorPrior,
+                gen("6.700", "100200.00", false), // APR delta would be > band IF compared
+                "FHA PURCHASE", false);
+
+        assertThat(reasons).containsExactly(ResetReason.PRODUCT_CHANGED);
+    }
 }
