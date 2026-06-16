@@ -1,4 +1,4 @@
-package com.msfg.los.documents.service;
+package com.msfg.los.platform.text;
 
 /**
  * Minimal HTML escaping for user-originated strings interpolated into generated text/html

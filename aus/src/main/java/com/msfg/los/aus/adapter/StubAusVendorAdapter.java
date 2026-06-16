@@ -8,7 +8,7 @@ import com.msfg.los.aus.service.AusVendorPort;
 import com.msfg.los.aus.service.AusVendorResult;
 import com.msfg.los.aus.service.CreditWiring;
 import com.msfg.los.aus.service.VendorArtifact;
-import com.msfg.los.documents.service.HtmlText;
+import com.msfg.los.platform.text.HtmlText;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;

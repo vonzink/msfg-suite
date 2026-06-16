@@ -1,4 +1,4 @@
-package com.msfg.los.documents.service;
+package com.msfg.los.platform.text;
 
 import org.junit.jupiter.api.Test;
 
