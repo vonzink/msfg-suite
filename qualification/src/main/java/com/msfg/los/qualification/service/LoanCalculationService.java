@@ -111,12 +111,13 @@ public class LoanCalculationService {
         netRentalDebt   = money(netRentalDebt);
 
         // ── 9. Income ─────────────────────────────────────────────────────────
-        // IncomeSummaryService is ZERO-seeded (never null).
-        BigDecimal baseIncome = incomeSummary.summarize(loanId).totalMonthlyIncome();
+        // Numeric-only path: already guarded above, so we skip the summary's redundant guard +
+        // unused borrower-name map (S2). Same total as summarize().totalMonthlyIncome() — never null.
+        BigDecimal baseIncome = incomeSummary.totalMonthlyIncomeForLoan(loanId);
         BigDecimal totalIncome = money(nz(baseIncome).add(nz(netRentalIncome)));
 
         // ── 10. Debts ─────────────────────────────────────────────────────────
-        BigDecimal dtiLiabilities  = liabilitySummary.summarize(loanId).dtiMonthlyPayments();
+        BigDecimal dtiLiabilities  = liabilitySummary.dtiMonthlyPaymentsForLoan(loanId);
         BigDecimal totalDebts = money(nz(dtiLiabilities).add(nz(netRentalDebt)));
 
         // ── 11. DTI ───────────────────────────────────────────────────────────

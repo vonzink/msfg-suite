@@ -69,6 +69,19 @@ public class IncomeSummaryService {
         return new IncomeSummaryResponse(rows, total);
     }
 
+    /**
+     * Total monthly income for a loan — numeric only, no borrower-name map and no rows.
+     *
+     * <p><b>Unguarded</b>: callable only from an already loan-scoped + access-checked context
+     * (e.g. {@code LoanCalculationService.calculate}, which guards once). The public
+     * {@link #summarize} keeps its guard + rows for the GET summary endpoint. Result is the same
+     * {@code totalMonthlyIncome} {@code summarize} returns (Σ non-null monthlyAmount; never null).
+     */
+    @Transactional(readOnly = true)
+    public BigDecimal totalMonthlyIncomeForLoan(UUID loanId) {
+        return income.sumMonthlyAmountByLoanId(loanId);
+    }
+
     private static String fullName(BorrowerParty b) {
         String first = b.getFirstName() == null ? "" : b.getFirstName();
         String last = b.getLastName() == null ? "" : b.getLastName();

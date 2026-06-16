@@ -69,6 +69,21 @@ public class LiabilitySummaryService {
         return new LiabilitySummaryResponse(rows, totalMonthlyPayments, dtiMonthlyPayments, totalUnpaidBalance);
     }
 
+    /**
+     * DTI-included monthly liability payments for a loan — numeric only, no borrower-name map and
+     * no rows.
+     *
+     * <p><b>Unguarded</b>: callable only from an already loan-scoped + access-checked context
+     * (e.g. {@code LoanCalculationService.calculate}, which guards once). The public
+     * {@link #summarize} keeps its guard + rows for the GET summary endpoint. Result equals the
+     * {@code dtiMonthlyPayments} {@code summarize} returns (Σ non-null monthlyPayment where
+     * includeInDti; never null).
+     */
+    @Transactional(readOnly = true)
+    public BigDecimal dtiMonthlyPaymentsForLoan(UUID loanId) {
+        return liabilities.sumDtiMonthlyPaymentsByLoanId(loanId);
+    }
+
     private static String fullName(BorrowerParty b) {
         String first = b.getFirstName() == null ? "" : b.getFirstName();
         String last = b.getLastName() == null ? "" : b.getLastName();
