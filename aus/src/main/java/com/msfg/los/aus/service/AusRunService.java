@@ -160,9 +160,8 @@ public class AusRunService {
         // Resubmits reuse the vendor-assigned casefile id from the latest prior run for this
         // vendor that actually got one — ERROR rows carry no vendorCaseId and must not break
         // casefile continuity after a failed submit.
-        String existingCaseId = runs.findByLoanIdOrderByRequestedAtDescIdDesc(loanId).stream()
-                .filter(r -> r.getVendor() == vendor && r.getVendorCaseId() != null)
-                .findFirst()
+        String existingCaseId = runs
+                .findTopByLoanIdAndVendorAndVendorCaseIdIsNotNullOrderByRequestedAtDescIdDesc(loanId, vendor)
                 .map(AusRun::getVendorCaseId)
                 .orElse(null);
 
