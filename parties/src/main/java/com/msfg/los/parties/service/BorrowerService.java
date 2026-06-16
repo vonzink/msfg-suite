@@ -57,6 +57,29 @@ public class BorrowerService {
         return borrowers.findByLoanIdOrderByOrdinalAsc(loanId);
     }
 
+    /**
+     * Cross-module read seam: the loan's borrowers, tenant-scoped and ordinal-ordered, WITHOUT a
+     * loan access decision. Callers in other modules guard loan access themselves (and have already
+     * done so) before reading borrower membership — this mirrors the raw repository query they used
+     * to make directly. Returns the {@code @TenantId}-filtered list ({@code findByLoanIdOrderByOrdinalAsc}).
+     */
+    @Transactional(readOnly = true)
+    public List<BorrowerParty> listByLoan(UUID loanId) {
+        return borrowers.findByLoanIdOrderByOrdinalAsc(loanId);
+    }
+
+    /**
+     * Cross-module read seam: true iff a borrower with this id exists in the caller's tenant AND
+     * belongs to the given loan. Mirrors {@code findByIdAndOrgId(borrowerId, org()).filter(loan match)}
+     * exactly; returns a boolean so each caller keeps its own miss semantics (NotFound vs Validation).
+     */
+    @Transactional(readOnly = true)
+    public boolean isBorrowerInLoan(UUID loanId, UUID borrowerId) {
+        return borrowers.findByIdAndOrgId(borrowerId, org())
+            .filter(b -> b.getLoanId().equals(loanId))
+            .isPresent();
+    }
+
     @Transactional
     public BorrowerParty update(UUID loanId, UUID borrowerId, UpdateBorrowerRequest req) {
         accessGuard.assertCanAccess(loanService.get(loanId));

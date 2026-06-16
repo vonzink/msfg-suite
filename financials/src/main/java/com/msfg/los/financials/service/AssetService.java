@@ -6,7 +6,7 @@ import com.msfg.los.financials.web.dto.AddAssetRequest;
 import com.msfg.los.financials.web.dto.UpdateAssetRequest;
 import com.msfg.los.loan.service.LoanAccessGuard;
 import com.msfg.los.loan.service.LoanService;
-import com.msfg.los.parties.repo.BorrowerRepository;
+import com.msfg.los.parties.service.BorrowerService;
 import com.msfg.los.platform.error.NotFoundException;
 import com.msfg.los.platform.error.ValidationException;
 import com.msfg.los.platform.tenancy.TenantContext;
@@ -21,19 +21,19 @@ import java.util.UUID;
 public class AssetService {
 
     private final AssetRepository assets;
-    private final BorrowerRepository borrowers;
+    private final BorrowerService borrowerService;
     private final LoanService loanService;
     private final LoanAccessGuard accessGuard;
     private final TenantContext tenantContext;
 
     public AssetService(AssetRepository assets, LoanService loanService,
                         LoanAccessGuard accessGuard, TenantContext tenantContext,
-                        BorrowerRepository borrowers) {
+                        BorrowerService borrowerService) {
         this.assets = assets;
         this.loanService = loanService;
         this.accessGuard = accessGuard;
         this.tenantContext = tenantContext;
-        this.borrowers = borrowers;
+        this.borrowerService = borrowerService;
     }
 
     private UUID org() {
@@ -42,9 +42,8 @@ public class AssetService {
 
     private void assertBorrowerInLoan(UUID loanId, UUID borrowerId) {
         accessGuard.assertCanAccess(loanService.get(loanId));
-        borrowers.findByIdAndOrgId(borrowerId, org())
-                .filter(b -> b.getLoanId().equals(loanId))
-                .orElseThrow(() -> new NotFoundException("Borrower", borrowerId));
+        if (!borrowerService.isBorrowerInLoan(loanId, borrowerId))
+            throw new NotFoundException("Borrower", borrowerId);
     }
 
     // max+1, not count — count reuses ordinals after a delete and collides

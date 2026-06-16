@@ -116,6 +116,17 @@ public class FeeService {
         return fees.findByLoanIdOrderByOrdinalAscIdAsc(loanId);
     }
 
+    /**
+     * Cross-module read seam: the loan's fee line items, tenant-scoped and ordinal-ordered, WITHOUT
+     * a loan access decision — the disclosure-assembly caller has already guarded access (its reload
+     * here is a tenant-scoped reload, not an access decision). Mirrors the raw
+     * {@code findByLoanIdOrderByOrdinalAscIdAsc} query.
+     */
+    @Transactional(readOnly = true)
+    public List<FeeLineItem> lineItemsForLoan(UUID loanId) {
+        return fees.findByLoanIdOrderByOrdinalAscIdAsc(loanId);
+    }
+
     @Transactional
     public FeeLineItem update(UUID loanId, UUID feeId, UpdateFeeRequest req) {
         accessGuard.assertCanAccess(loanService.get(loanId));

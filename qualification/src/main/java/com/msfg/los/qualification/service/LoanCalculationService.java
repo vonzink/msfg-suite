@@ -11,7 +11,7 @@ import com.msfg.los.qualification.math.LoanCalcRules;
 import com.msfg.los.qualification.math.MortgageMath;
 import com.msfg.los.qualification.web.dto.LoanCalculationResponse;
 import com.msfg.los.reo.domain.RealEstateOwned;
-import com.msfg.los.reo.repo.RealEstateOwnedRepository;
+import com.msfg.los.reo.service.ReoService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,19 +36,19 @@ public class LoanCalculationService {
     private final LoanAccessGuard accessGuard;
     private final IncomeSummaryService incomeSummary;
     private final LiabilitySummaryService liabilitySummary;
-    private final RealEstateOwnedRepository reoRepo;
+    private final ReoService reoService;
 
     public LoanCalculationService(
             LoanService loanService,
             LoanAccessGuard accessGuard,
             IncomeSummaryService incomeSummary,
             LiabilitySummaryService liabilitySummary,
-            RealEstateOwnedRepository reoRepo) {
+            ReoService reoService) {
         this.loanService = loanService;
         this.accessGuard = accessGuard;
         this.incomeSummary = incomeSummary;
         this.liabilitySummary = liabilitySummary;
-        this.reoRepo = reoRepo;
+        this.reoService = reoService;
     }
 
     @Transactional(readOnly = true)
@@ -98,7 +98,7 @@ public class LoanCalculationService {
                 : money(pi.add(nz(taxes)).add(nz(hazIns)).add(nz(hoa)).add(nz(mi)));
 
         // ── 8. Net rental income / debt (Fannie 75% convention) ───────────────
-        List<RealEstateOwned> reoRows = reoRepo.findByLoanIdOrderByOrdinalAscIdAsc(loanId);
+        List<RealEstateOwned> reoRows = reoService.list(loanId);
         BigDecimal netRentalIncome = BigDecimal.ZERO;
         BigDecimal netRentalDebt   = BigDecimal.ZERO;
         for (RealEstateOwned reo : reoRows) {

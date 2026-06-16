@@ -21,7 +21,7 @@ import com.msfg.los.loan.domain.SubjectProperty;
 import com.msfg.los.loan.service.LoanAccessGuard;
 import com.msfg.los.loan.service.LoanService;
 import com.msfg.los.parties.domain.BorrowerParty;
-import com.msfg.los.parties.repo.BorrowerRepository;
+import com.msfg.los.parties.service.BorrowerService;
 import com.msfg.los.platform.error.ValidationException;
 import com.msfg.los.platform.security.CurrentUser;
 import org.springframework.stereotype.Service;
@@ -54,7 +54,7 @@ public class AusRunService {
     private final DocumentService documentService;
     private final LoanService loanService;
     private final LoanAccessGuard accessGuard;
-    private final BorrowerRepository borrowers;
+    private final BorrowerService borrowerService;
     private final CurrentUser currentUser;
     private final AusRunErrorRecorder errorRecorder;
 
@@ -66,7 +66,7 @@ public class AusRunService {
                          DocumentService documentService,
                          LoanService loanService,
                          LoanAccessGuard accessGuard,
-                         BorrowerRepository borrowers,
+                         BorrowerService borrowerService,
                          CurrentUser currentUser,
                          AusRunErrorRecorder errorRecorder) {
         this.runs = runs;
@@ -77,7 +77,7 @@ public class AusRunService {
         this.documentService = documentService;
         this.loanService = loanService;
         this.accessGuard = accessGuard;
-        this.borrowers = borrowers;
+        this.borrowerService = borrowerService;
         this.currentUser = currentUser;
         this.errorRecorder = errorRecorder;
     }
@@ -99,7 +99,7 @@ public class AusRunService {
             if (profile.getDuSettings() != null) du = profile.getDuSettings();
             if (profile.getLpaSettings() != null) lpa = profile.getLpaSettings();
         }
-        List<BorrowerParty> loanBorrowers = borrowers.findByLoanIdOrderByOrdinalAsc(loanId);
+        List<BorrowerParty> loanBorrowers = borrowerService.listByLoan(loanId);
 
         List<AusRunResponse> out = new ArrayList<>();
         for (AusVendor vendor : vendors) {

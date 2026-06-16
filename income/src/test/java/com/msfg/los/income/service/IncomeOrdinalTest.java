@@ -10,8 +10,7 @@ import com.msfg.los.income.web.dto.AddIncomeRequest;
 import com.msfg.los.loan.domain.Loan;
 import com.msfg.los.loan.service.LoanAccessGuard;
 import com.msfg.los.loan.service.LoanService;
-import com.msfg.los.parties.domain.BorrowerParty;
-import com.msfg.los.parties.repo.BorrowerRepository;
+import com.msfg.los.parties.service.BorrowerService;
 import com.msfg.los.platform.tenancy.TenantContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -44,22 +43,19 @@ class IncomeOrdinalTest {
 
     @Mock IncomeItemRepository income;
     @Mock EmploymentRepository employments;
-    @Mock BorrowerRepository borrowers;
+    @Mock BorrowerService borrowerService;
     @Mock LoanService loanService;
     @Mock LoanAccessGuard accessGuard;
     @Mock TenantContext tenantContext;
 
     private void stubBorrowerInLoan() {
-        when(tenantContext.orgId()).thenReturn(Optional.of(ORG_ID));
         when(loanService.get(LOAN_ID)).thenReturn(new Loan());
-        BorrowerParty b = new BorrowerParty();
-        b.setLoanId(LOAN_ID);
-        when(borrowers.findByIdAndOrgId(BORROWER_ID, ORG_ID)).thenReturn(Optional.of(b));
+        when(borrowerService.isBorrowerInLoan(LOAN_ID, BORROWER_ID)).thenReturn(true);
     }
 
     @Test
     void incomeAddUsesMaxPlusOneNotCount() {
-        IncomeService svc = new IncomeService(income, employments, borrowers, loanService, accessGuard, tenantContext);
+        IncomeService svc = new IncomeService(income, employments, borrowerService, loanService, accessGuard, tenantContext);
         stubBorrowerInLoan();
 
         IncomeItem existingTop = new IncomeItem();
@@ -77,7 +73,7 @@ class IncomeOrdinalTest {
 
     @Test
     void incomeAddFirstRowOrdinalZero() {
-        IncomeService svc = new IncomeService(income, employments, borrowers, loanService, accessGuard, tenantContext);
+        IncomeService svc = new IncomeService(income, employments, borrowerService, loanService, accessGuard, tenantContext);
         stubBorrowerInLoan();
 
         when(income.findTopByBorrowerIdOrderByOrdinalDesc(BORROWER_ID)).thenReturn(Optional.empty());
@@ -93,7 +89,7 @@ class IncomeOrdinalTest {
 
     @Test
     void employmentAddUsesMaxPlusOneNotCount() {
-        EmploymentService svc = new EmploymentService(employments, borrowers, loanService, accessGuard, tenantContext);
+        EmploymentService svc = new EmploymentService(employments, borrowerService, loanService, accessGuard, tenantContext);
         stubBorrowerInLoan();
 
         Employment existingTop = new Employment();

@@ -7,7 +7,7 @@ import com.msfg.los.financials.web.dto.LiabilitySummaryRow;
 import com.msfg.los.loan.service.LoanAccessGuard;
 import com.msfg.los.loan.service.LoanService;
 import com.msfg.los.parties.domain.BorrowerParty;
-import com.msfg.los.parties.repo.BorrowerRepository;
+import com.msfg.los.parties.service.BorrowerService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,14 +21,14 @@ import java.util.stream.Collectors;
 public class LiabilitySummaryService {
 
     private final LiabilityRepository liabilities;
-    private final BorrowerRepository borrowers;
+    private final BorrowerService borrowerService;
     private final LoanService loanService;
     private final LoanAccessGuard accessGuard;
 
-    public LiabilitySummaryService(LiabilityRepository liabilities, BorrowerRepository borrowers,
+    public LiabilitySummaryService(LiabilityRepository liabilities, BorrowerService borrowerService,
                                    LoanService loanService, LoanAccessGuard accessGuard) {
         this.liabilities = liabilities;
-        this.borrowers = borrowers;
+        this.borrowerService = borrowerService;
         this.loanService = loanService;
         this.accessGuard = accessGuard;
     }
@@ -37,7 +37,7 @@ public class LiabilitySummaryService {
     public LiabilitySummaryResponse summarize(UUID loanId) {
         accessGuard.assertCanAccess(loanService.get(loanId));
 
-        Map<UUID, String> borrowerNames = borrowers.findByLoanIdOrderByOrdinalAsc(loanId).stream()
+        Map<UUID, String> borrowerNames = borrowerService.listByLoan(loanId).stream()
                 .collect(Collectors.toMap(BorrowerParty::getId, LiabilitySummaryService::fullName));
 
         List<Liability> items = liabilities.findByLoanIdOrderByOrdinalAsc(loanId);

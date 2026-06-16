@@ -8,7 +8,7 @@ import com.msfg.los.income.web.dto.AddIncomeRequest;
 import com.msfg.los.income.web.dto.UpdateIncomeRequest;
 import com.msfg.los.loan.service.LoanAccessGuard;
 import com.msfg.los.loan.service.LoanService;
-import com.msfg.los.parties.repo.BorrowerRepository;
+import com.msfg.los.parties.service.BorrowerService;
 import com.msfg.los.platform.error.NotFoundException;
 import com.msfg.los.platform.error.ValidationException;
 import com.msfg.los.platform.tenancy.TenantContext;
@@ -24,17 +24,17 @@ public class IncomeService {
 
     private final IncomeItemRepository income;
     private final EmploymentRepository employments;
-    private final BorrowerRepository borrowers;
+    private final BorrowerService borrowerService;
     private final LoanService loanService;
     private final LoanAccessGuard accessGuard;
     private final TenantContext tenantContext;
 
     public IncomeService(IncomeItemRepository income, EmploymentRepository employments,
-                         BorrowerRepository borrowers, LoanService loanService,
+                         BorrowerService borrowerService, LoanService loanService,
                          LoanAccessGuard accessGuard, TenantContext tenantContext) {
         this.income = income;
         this.employments = employments;
-        this.borrowers = borrowers;
+        this.borrowerService = borrowerService;
         this.loanService = loanService;
         this.accessGuard = accessGuard;
         this.tenantContext = tenantContext;
@@ -46,9 +46,8 @@ public class IncomeService {
 
     private void assertBorrowerInLoan(UUID loanId, UUID borrowerId) {
         accessGuard.assertCanAccess(loanService.get(loanId));
-        borrowers.findByIdAndOrgId(borrowerId, org())
-                .filter(b -> b.getLoanId().equals(loanId))
-                .orElseThrow(() -> new NotFoundException("Borrower", borrowerId));
+        if (!borrowerService.isBorrowerInLoan(loanId, borrowerId))
+            throw new NotFoundException("Borrower", borrowerId);
     }
 
     // max+1, not count — count reuses ordinals after a delete and collides

@@ -11,8 +11,7 @@ import com.msfg.los.financials.web.dto.AddLiabilityRequest;
 import com.msfg.los.loan.domain.Loan;
 import com.msfg.los.loan.service.LoanAccessGuard;
 import com.msfg.los.loan.service.LoanService;
-import com.msfg.los.parties.domain.BorrowerParty;
-import com.msfg.los.parties.repo.BorrowerRepository;
+import com.msfg.los.parties.service.BorrowerService;
 import com.msfg.los.platform.tenancy.TenantContext;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -43,22 +42,19 @@ class FinancialsOrdinalTest {
 
     @Mock AssetRepository assets;
     @Mock LiabilityRepository liabilities;
-    @Mock BorrowerRepository borrowers;
+    @Mock BorrowerService borrowerService;
     @Mock LoanService loanService;
     @Mock LoanAccessGuard accessGuard;
     @Mock TenantContext tenantContext;
 
     private void stubBorrowerInLoan() {
-        when(tenantContext.orgId()).thenReturn(Optional.of(ORG_ID));
         when(loanService.get(LOAN_ID)).thenReturn(new Loan());
-        BorrowerParty b = new BorrowerParty();
-        b.setLoanId(LOAN_ID);
-        when(borrowers.findByIdAndOrgId(BORROWER_ID, ORG_ID)).thenReturn(Optional.of(b));
+        when(borrowerService.isBorrowerInLoan(LOAN_ID, BORROWER_ID)).thenReturn(true);
     }
 
     @Test
     void assetAddUsesMaxPlusOneNotCount() {
-        AssetService svc = new AssetService(assets, loanService, accessGuard, tenantContext, borrowers);
+        AssetService svc = new AssetService(assets, loanService, accessGuard, tenantContext, borrowerService);
         stubBorrowerInLoan();
 
         Asset existingTop = new Asset();
@@ -76,7 +72,7 @@ class FinancialsOrdinalTest {
 
     @Test
     void liabilityAddUsesMaxPlusOneNotCount() {
-        LiabilityService svc = new LiabilityService(liabilities, loanService, accessGuard, tenantContext, borrowers);
+        LiabilityService svc = new LiabilityService(liabilities, loanService, accessGuard, tenantContext, borrowerService);
         stubBorrowerInLoan();
 
         Liability existingTop = new Liability();
