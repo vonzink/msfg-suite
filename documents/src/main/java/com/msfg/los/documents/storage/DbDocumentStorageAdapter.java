@@ -3,11 +3,12 @@ package com.msfg.los.documents.storage;
 import com.msfg.los.documents.domain.DocumentContent;
 import com.msfg.los.documents.repo.DocumentContentRepository;
 import com.msfg.los.platform.error.NotFoundException;
+import com.msfg.los.platform.storage.BlobStoragePort;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 @Component
-public class DbDocumentStorageAdapter implements DocumentStoragePort {
+public class DbDocumentStorageAdapter implements BlobStoragePort {
 
     private final DocumentContentRepository contents;
 
