@@ -33,12 +33,8 @@ public class ContactService {
         this.tenantContext = tenantContext;
     }
 
-    private UUID org() {
-        return tenantContext.orgId().orElseThrow(() -> new NotFoundException("Tenant", "current"));
-    }
-
     private Contact load(UUID loanId, UUID contactId) {
-        return contacts.findByIdAndOrgId(contactId, org())
+        return contacts.findByIdAndOrgId(contactId, tenantContext.requireOrgId())
                 .filter(c -> c.getLoanId().equals(loanId))
                 .orElseThrow(() -> new NotFoundException("Contact", contactId));
     }

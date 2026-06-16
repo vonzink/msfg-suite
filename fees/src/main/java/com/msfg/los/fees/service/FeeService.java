@@ -35,12 +35,8 @@ public class FeeService {
         this.tenantContext = tenantContext;
     }
 
-    private UUID org() {
-        return tenantContext.orgId().orElseThrow(() -> new NotFoundException("Tenant", "current"));
-    }
-
     private FeeLineItem load(UUID loanId, UUID feeId) {
-        return fees.findByIdAndOrgId(feeId, org())
+        return fees.findByIdAndOrgId(feeId, tenantContext.requireOrgId())
                 .filter(f -> f.getLoanId().equals(loanId))
                 .orElseThrow(() -> new NotFoundException("FeeLineItem", feeId));
     }

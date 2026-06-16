@@ -36,10 +36,6 @@ public class AssetService {
         this.borrowerService = borrowerService;
     }
 
-    private UUID org() {
-        return tenantContext.orgId().orElseThrow(() -> new NotFoundException("Tenant", "current"));
-    }
-
     private void assertBorrowerInLoan(UUID loanId, UUID borrowerId) {
         accessGuard.assertCanAccess(loanService.get(loanId));
         if (!borrowerService.isBorrowerInLoan(loanId, borrowerId))
@@ -83,7 +79,7 @@ public class AssetService {
     @Transactional
     public Asset update(UUID loanId, UUID borrowerId, UUID assetId, UpdateAssetRequest req) {
         assertBorrowerInLoan(loanId, borrowerId);
-        Asset asset = assets.findByIdAndOrgId(assetId, org())
+        Asset asset = assets.findByIdAndOrgId(assetId, tenantContext.requireOrgId())
                 .filter(x -> x.getBorrowerId().equals(borrowerId))
                 .orElseThrow(() -> new NotFoundException("Asset", assetId));
 
@@ -102,7 +98,7 @@ public class AssetService {
     @Transactional
     public void delete(UUID loanId, UUID borrowerId, UUID assetId) {
         assertBorrowerInLoan(loanId, borrowerId);
-        Asset asset = assets.findByIdAndOrgId(assetId, org())
+        Asset asset = assets.findByIdAndOrgId(assetId, tenantContext.requireOrgId())
                 .filter(x -> x.getBorrowerId().equals(borrowerId))
                 .orElseThrow(() -> new NotFoundException("Asset", assetId));
         assets.delete(asset);

@@ -40,10 +40,6 @@ public class IncomeService {
         this.tenantContext = tenantContext;
     }
 
-    private UUID org() {
-        return tenantContext.orgId().orElseThrow(() -> new NotFoundException("Tenant", "current"));
-    }
-
     private void assertBorrowerInLoan(UUID loanId, UUID borrowerId) {
         accessGuard.assertCanAccess(loanService.get(loanId));
         if (!borrowerService.isBorrowerInLoan(loanId, borrowerId))
@@ -61,7 +57,7 @@ public class IncomeService {
         if (type.isEmployment()) {
             if (employmentId == null)
                 throw new ValidationException("employmentId is required for employment income (" + type + ")");
-            employments.findByIdAndOrgId(employmentId, org())
+            employments.findByIdAndOrgId(employmentId, tenantContext.requireOrgId())
                     .filter(e -> e.getBorrowerId().equals(borrowerId))
                     .orElseThrow(() -> new ValidationException(
                             "employmentId must reference an employment of this borrower"));
@@ -96,7 +92,7 @@ public class IncomeService {
     @Transactional
     public IncomeItem update(UUID loanId, UUID borrowerId, UUID incomeId, UpdateIncomeRequest req) {
         assertBorrowerInLoan(loanId, borrowerId);
-        IncomeItem item = income.findByIdAndOrgId(incomeId, org())
+        IncomeItem item = income.findByIdAndOrgId(incomeId, tenantContext.requireOrgId())
                 .filter(x -> x.getBorrowerId().equals(borrowerId))
                 .orElseThrow(() -> new NotFoundException("Income", incomeId));
 
@@ -120,7 +116,7 @@ public class IncomeService {
     @Transactional
     public void delete(UUID loanId, UUID borrowerId, UUID incomeId) {
         assertBorrowerInLoan(loanId, borrowerId);
-        IncomeItem item = income.findByIdAndOrgId(incomeId, org())
+        IncomeItem item = income.findByIdAndOrgId(incomeId, tenantContext.requireOrgId())
                 .filter(x -> x.getBorrowerId().equals(borrowerId))
                 .orElseThrow(() -> new NotFoundException("Income", incomeId));
         income.delete(item);

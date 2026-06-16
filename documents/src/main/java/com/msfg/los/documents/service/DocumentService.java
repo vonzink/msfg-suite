@@ -48,10 +48,6 @@ public class DocumentService {
         this.generator = generator;
     }
 
-    private UUID org() {
-        return tenantContext.orgId().orElseThrow(() -> new NotFoundException("Tenant", "current"));
-    }
-
     @Transactional
     public Document upload(UUID loanId, MultipartFile file, DocumentType type, String category) throws IOException {
         accessGuard.assertCanAccess(loanService.get(loanId));
@@ -87,7 +83,7 @@ public class DocumentService {
     @Transactional(readOnly = true)
     public DownloadResult load(UUID loanId, UUID docId) {
         accessGuard.assertCanAccess(loanService.get(loanId));
-        Document doc = documents.findByIdAndOrgId(docId, org())
+        Document doc = documents.findByIdAndOrgId(docId, tenantContext.requireOrgId())
                 .filter(d -> d.getLoanId().equals(loanId))
                 .orElseThrow(() -> new NotFoundException("Document", docId));
         byte[] bytes = port.load(doc.getStorageKey());
@@ -97,7 +93,7 @@ public class DocumentService {
     @Transactional
     public void delete(UUID loanId, UUID docId) {
         accessGuard.assertCanAccess(loanService.get(loanId));
-        Document doc = documents.findByIdAndOrgId(docId, org())
+        Document doc = documents.findByIdAndOrgId(docId, tenantContext.requireOrgId())
                 .filter(d -> d.getLoanId().equals(loanId))
                 .orElseThrow(() -> new NotFoundException("Document", docId));
         port.delete(doc.getStorageKey());

@@ -5,8 +5,6 @@ import com.msfg.los.coc.repo.CocDraftRepository;
 import com.msfg.los.coc.web.dto.CocDraftRequest;
 import com.msfg.los.loan.service.LoanAccessGuard;
 import com.msfg.los.loan.service.LoanService;
-import com.msfg.los.platform.error.NotFoundException;
-import com.msfg.los.platform.tenancy.TenantContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,20 +17,13 @@ public class CocDraftService {
     private final CocDraftRepository drafts;
     private final LoanService loanService;
     private final LoanAccessGuard accessGuard;
-    private final TenantContext tenantContext;
 
     public CocDraftService(CocDraftRepository drafts,
                            LoanService loanService,
-                           LoanAccessGuard accessGuard,
-                           TenantContext tenantContext) {
+                           LoanAccessGuard accessGuard) {
         this.drafts = drafts;
         this.loanService = loanService;
         this.accessGuard = accessGuard;
-        this.tenantContext = tenantContext;
-    }
-
-    private UUID org() {
-        return tenantContext.orgId().orElseThrow(() -> new NotFoundException("Tenant", "current"));
     }
 
     @Transactional(readOnly = true)

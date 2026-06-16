@@ -7,7 +7,6 @@ import com.msfg.los.loan.service.LoanAccessGuard;
 import com.msfg.los.loan.service.LoanService;
 import com.msfg.los.parties.service.BorrowerService;
 import com.msfg.los.platform.error.NotFoundException;
-import com.msfg.los.platform.tenancy.TenantContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,22 +20,15 @@ public class DemographicsService {
     private final BorrowerService borrowerService;
     private final LoanService loanService;
     private final LoanAccessGuard accessGuard;
-    private final TenantContext tenantContext;
 
     public DemographicsService(BorrowerDemographicsRepository repo,
                                BorrowerService borrowerService,
                                LoanService loanService,
-                               LoanAccessGuard accessGuard,
-                               TenantContext tenantContext) {
+                               LoanAccessGuard accessGuard) {
         this.repo = repo;
         this.borrowerService = borrowerService;
         this.loanService = loanService;
         this.accessGuard = accessGuard;
-        this.tenantContext = tenantContext;
-    }
-
-    private UUID org() {
-        return tenantContext.orgId().orElseThrow(() -> new NotFoundException("Tenant", "current"));
     }
 
     private void assertBorrowerInLoan(UUID loanId, UUID borrowerId) {

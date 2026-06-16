@@ -45,10 +45,6 @@ public class CocService {
         this.currentUser = currentUser;
     }
 
-    private UUID org() {
-        return tenantContext.orgId().orElseThrow(() -> new NotFoundException("Tenant", "current"));
-    }
-
     @Transactional
     public CocHistoryEntry submit(UUID loanId, CocSubmitRequest req) {
         accessGuard.assertCanAccess(loanService.get(loanId));
@@ -96,7 +92,7 @@ public class CocService {
             throw new ForbiddenException("Decision requires UNDERWRITER");
         }
 
-        CocHistoryEntry entry = history.findByIdAndOrgId(entryId, org())
+        CocHistoryEntry entry = history.findByIdAndOrgId(entryId, tenantContext.requireOrgId())
                 .filter(e -> e.getLoanId().equals(loanId))
                 .orElseThrow(() -> new NotFoundException("CoC entry", entryId));
 

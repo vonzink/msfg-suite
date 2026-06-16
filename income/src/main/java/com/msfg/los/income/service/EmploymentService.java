@@ -40,10 +40,6 @@ public class EmploymentService {
         this.tenantContext = tenantContext;
     }
 
-    private UUID org() {
-        return tenantContext.orgId().orElseThrow(() -> new NotFoundException("Tenant", "current"));
-    }
-
     /** Verify the loan is in the caller's org + owned, and the borrower belongs to that loan. */
     private void assertBorrowerInLoan(UUID loanId, UUID borrowerId) {
         accessGuard.assertCanAccess(loanService.get(loanId));   // 404 cross-org loan, 403 not owner
@@ -85,7 +81,7 @@ public class EmploymentService {
     @Transactional
     public Employment update(UUID loanId, UUID borrowerId, UUID employmentId, UpdateEmploymentRequest req) {
         assertBorrowerInLoan(loanId, borrowerId);
-        Employment e = employments.findByIdAndOrgId(employmentId, org())
+        Employment e = employments.findByIdAndOrgId(employmentId, tenantContext.requireOrgId())
                 .filter(x -> x.getBorrowerId().equals(borrowerId))
                 .orElseThrow(() -> new NotFoundException("Employment", employmentId));
         applyAndValidate(e,
@@ -102,7 +98,7 @@ public class EmploymentService {
     @Transactional
     public void delete(UUID loanId, UUID borrowerId, UUID employmentId) {
         assertBorrowerInLoan(loanId, borrowerId);
-        Employment e = employments.findByIdAndOrgId(employmentId, org())
+        Employment e = employments.findByIdAndOrgId(employmentId, tenantContext.requireOrgId())
                 .filter(x -> x.getBorrowerId().equals(borrowerId))
                 .orElseThrow(() -> new NotFoundException("Employment", employmentId));
         employments.delete(e);

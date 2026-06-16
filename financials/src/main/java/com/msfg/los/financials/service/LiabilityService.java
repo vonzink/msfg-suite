@@ -36,10 +36,6 @@ public class LiabilityService {
         this.borrowerService = borrowerService;
     }
 
-    private UUID org() {
-        return tenantContext.orgId().orElseThrow(() -> new NotFoundException("Tenant", "current"));
-    }
-
     private void assertBorrowerInLoan(UUID loanId, UUID borrowerId) {
         accessGuard.assertCanAccess(loanService.get(loanId));
         if (!borrowerService.isBorrowerInLoan(loanId, borrowerId))
@@ -120,7 +116,7 @@ public class LiabilityService {
     @Transactional
     public Liability update(UUID loanId, UUID borrowerId, UUID liabilityId, UpdateLiabilityRequest req) {
         assertBorrowerInLoan(loanId, borrowerId);
-        Liability l = liabilities.findByIdAndOrgId(liabilityId, org())
+        Liability l = liabilities.findByIdAndOrgId(liabilityId, tenantContext.requireOrgId())
                 .filter(x -> x.getBorrowerId().equals(borrowerId))
                 .orElseThrow(() -> new NotFoundException("Liability", liabilityId));
 
@@ -144,7 +140,7 @@ public class LiabilityService {
     @Transactional
     public void delete(UUID loanId, UUID borrowerId, UUID liabilityId) {
         assertBorrowerInLoan(loanId, borrowerId);
-        Liability l = liabilities.findByIdAndOrgId(liabilityId, org())
+        Liability l = liabilities.findByIdAndOrgId(liabilityId, tenantContext.requireOrgId())
                 .filter(x -> x.getBorrowerId().equals(borrowerId))
                 .orElseThrow(() -> new NotFoundException("Liability", liabilityId));
         liabilities.delete(l);

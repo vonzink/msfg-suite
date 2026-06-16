@@ -40,17 +40,13 @@ public class VendorCredentialService {
         this.tenantContext = tenantContext;
     }
 
-    private UUID org() {
-        return tenantContext.orgId().orElseThrow(() -> new NotFoundException("Tenant", "current"));
-    }
-
     private void guard(UUID loanId) {
         accessGuard.assertCanAccess(loanService.get(loanId));
     }
 
     @Transactional
     public VendorCredentialResponse upsertOrg(CredentialVendor vendor, UpsertVendorCredentialRequest req) {
-        VendorCredential cred = credentials.findByOrgIdAndVendorAndLoanIdIsNull(org(), vendor)
+        VendorCredential cred = credentials.findByOrgIdAndVendorAndLoanIdIsNull(tenantContext.requireOrgId(), vendor)
                 .orElseGet(() -> {
                     VendorCredential c = new VendorCredential();
                     c.setVendor(vendor);
@@ -63,7 +59,7 @@ public class VendorCredentialService {
 
     @Transactional(readOnly = true)
     public List<VendorCredentialResponse> listOrg() {
-        return credentials.findByOrgIdAndLoanIdIsNull(org()).stream()
+        return credentials.findByOrgIdAndLoanIdIsNull(tenantContext.requireOrgId()).stream()
                 .map(this::toResponse)
                 .toList();
     }
@@ -71,7 +67,7 @@ public class VendorCredentialService {
     @Transactional
     public VendorCredentialResponse upsertLoan(UUID loanId, CredentialVendor vendor, UpsertVendorCredentialRequest req) {
         guard(loanId);
-        VendorCredential cred = credentials.findByOrgIdAndVendorAndLoanId(org(), vendor, loanId)
+        VendorCredential cred = credentials.findByOrgIdAndVendorAndLoanId(tenantContext.requireOrgId(), vendor, loanId)
                 .orElseGet(() -> {
                     VendorCredential c = new VendorCredential();
                     c.setVendor(vendor);
@@ -85,7 +81,7 @@ public class VendorCredentialService {
     @Transactional(readOnly = true)
     public List<VendorCredentialResponse> listLoan(UUID loanId) {
         guard(loanId);
-        return credentials.findByOrgIdAndLoanId(org(), loanId).stream()
+        return credentials.findByOrgIdAndLoanId(tenantContext.requireOrgId(), loanId).stream()
                 .map(this::toResponse)
                 .toList();
     }
@@ -93,7 +89,7 @@ public class VendorCredentialService {
     @Transactional
     public void deleteLoan(UUID loanId, CredentialVendor vendor) {
         guard(loanId);
-        VendorCredential cred = credentials.findByOrgIdAndVendorAndLoanId(org(), vendor, loanId)
+        VendorCredential cred = credentials.findByOrgIdAndVendorAndLoanId(tenantContext.requireOrgId(), vendor, loanId)
                 .orElseThrow(() -> new NotFoundException("VendorCredential", vendor.name()));
         credentials.delete(cred);
     }
@@ -107,8 +103,8 @@ public class VendorCredentialService {
      */
     @Transactional(readOnly = true)
     public ResolvedCredentials resolve(UUID loanId, CredentialVendor vendor) {
-        return credentials.findByOrgIdAndVendorAndLoanId(org(), vendor, loanId)
-                .or(() -> credentials.findByOrgIdAndVendorAndLoanIdIsNull(org(), vendor))
+        return credentials.findByOrgIdAndVendorAndLoanId(tenantContext.requireOrgId(), vendor, loanId)
+                .or(() -> credentials.findByOrgIdAndVendorAndLoanIdIsNull(tenantContext.requireOrgId(), vendor))
                 .map(c -> new ResolvedCredentials(
                         c.getLoanId() != null ? CredentialSource.LOAN : CredentialSource.ORG,
                         c.getInstitutionId(),

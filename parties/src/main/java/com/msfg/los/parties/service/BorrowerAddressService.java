@@ -36,14 +36,10 @@ public class BorrowerAddressService {
         this.tenantContext = tenantContext;
     }
 
-    private UUID org() {
-        return tenantContext.orgId().orElseThrow(() -> new NotFoundException("Tenant", "current"));
-    }
-
     /** Verify the loan is in the caller's org + owned, and the borrower belongs to that loan. */
     private void assertBorrowerInLoan(UUID loanId, UUID borrowerId) {
         accessGuard.assertCanAccess(loanService.get(loanId));   // 404 cross-org loan, 403 not owner
-        borrowers.findByIdAndOrgId(borrowerId, org())
+        borrowers.findByIdAndOrgId(borrowerId, tenantContext.requireOrgId())
                 .filter(b -> b.getLoanId().equals(loanId))
                 .orElseThrow(() -> new NotFoundException("Borrower", borrowerId));
     }
@@ -71,7 +67,7 @@ public class BorrowerAddressService {
     @Transactional
     public BorrowerAddress update(UUID loanId, UUID borrowerId, UUID addressId, UpdateAddressRequest req) {
         assertBorrowerInLoan(loanId, borrowerId);
-        BorrowerAddress a = addresses.findByIdAndOrgId(addressId, org())
+        BorrowerAddress a = addresses.findByIdAndOrgId(addressId, tenantContext.requireOrgId())
                 .filter(x -> x.getBorrowerId().equals(borrowerId))
                 .orElseThrow(() -> new NotFoundException("Address", addressId));
         apply(a, req.addressLine1(), req.addressLine2(), req.city(), req.state(), req.postalCode(), req.country(),
@@ -83,7 +79,7 @@ public class BorrowerAddressService {
     @Transactional
     public void delete(UUID loanId, UUID borrowerId, UUID addressId) {
         assertBorrowerInLoan(loanId, borrowerId);
-        BorrowerAddress a = addresses.findByIdAndOrgId(addressId, org())
+        BorrowerAddress a = addresses.findByIdAndOrgId(addressId, tenantContext.requireOrgId())
                 .filter(x -> x.getBorrowerId().equals(borrowerId))
                 .orElseThrow(() -> new NotFoundException("Address", addressId));
         addresses.delete(a);

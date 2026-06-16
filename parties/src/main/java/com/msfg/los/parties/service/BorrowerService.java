@@ -29,9 +29,8 @@ public class BorrowerService {
         this.tenantContext = tenantContext; this.piiAccessRecorder = piiAccessRecorder;
     }
 
-    private UUID org() { return tenantContext.orgId().orElseThrow(() -> new NotFoundException("Tenant", "current")); }
     private BorrowerParty load(UUID loanId, UUID borrowerId) {
-        return borrowers.findByIdAndOrgId(borrowerId, org())
+        return borrowers.findByIdAndOrgId(borrowerId, tenantContext.requireOrgId())
             .filter(x -> x.getLoanId().equals(loanId))
             .orElseThrow(() -> new NotFoundException("Borrower", borrowerId));
     }
@@ -70,12 +69,12 @@ public class BorrowerService {
 
     /**
      * Cross-module read seam: true iff a borrower with this id exists in the caller's tenant AND
-     * belongs to the given loan. Mirrors {@code findByIdAndOrgId(borrowerId, org()).filter(loan match)}
+     * belongs to the given loan. Mirrors {@code findByIdAndOrgId(borrowerId, requireOrgId()).filter(loan match)}
      * exactly; returns a boolean so each caller keeps its own miss semantics (NotFound vs Validation).
      */
     @Transactional(readOnly = true)
     public boolean isBorrowerInLoan(UUID loanId, UUID borrowerId) {
-        return borrowers.findByIdAndOrgId(borrowerId, org())
+        return borrowers.findByIdAndOrgId(borrowerId, tenantContext.requireOrgId())
             .filter(b -> b.getLoanId().equals(loanId))
             .isPresent();
     }
