@@ -7,6 +7,7 @@ import com.msfg.los.loan.domain.LoanPurposeType;
 import com.msfg.los.loan.domain.SubjectProperty;
 import com.msfg.los.loan.service.LoanAccessGuard;
 import com.msfg.los.loan.service.LoanService;
+import com.msfg.los.qualification.math.LoanCalcRules;
 import com.msfg.los.qualification.math.MortgageMath;
 import com.msfg.los.qualification.web.dto.LoanCalculationResponse;
 import com.msfg.los.reo.domain.RealEstateOwned;
@@ -30,8 +31,6 @@ import static com.msfg.los.qualification.math.MortgageMath.percentRatio;
  */
 @Service
 public class LoanCalculationService {
-
-    private static final BigDecimal SEVENTY_FIVE_PCT = new BigDecimal("0.75");
 
     private final LoanService loanService;
     private final LoanAccessGuard accessGuard;
@@ -83,7 +82,7 @@ public class LoanCalculationService {
                 : money(nz(base).add(nz(financedFees)));
 
         // ── 4. LTV basis ──────────────────────────────────────────────────────
-        BigDecimal ltvBasis = computeLtvBasis(purpose, salesPrice, appraised, estimated);
+        BigDecimal ltvBasis = LoanCalcRules.computeLtvBasis(purpose, salesPrice, appraised, estimated);
 
         // ── 5. LTV / CLTV / TLTV — percentRatio returns null if basis null/zero
         BigDecimal ltv  = percentRatio(base, ltvBasis);
@@ -103,10 +102,10 @@ public class LoanCalculationService {
         BigDecimal netRentalIncome = BigDecimal.ZERO;
         BigDecimal netRentalDebt   = BigDecimal.ZERO;
         for (RealEstateOwned reo : reoRows) {
-            BigDecimal net = SEVENTY_FIVE_PCT.multiply(nz(reo.getGrossMonthlyRentalIncome()))
-                    .subtract(nz(reo.getMortgageMonthlyPayment()));
-            netRentalIncome = netRentalIncome.add(net.max(BigDecimal.ZERO));
-            netRentalDebt   = netRentalDebt.add(net.negate().max(BigDecimal.ZERO));
+            BigDecimal[] split = LoanCalcRules.netRentalSplit(
+                    reo.getGrossMonthlyRentalIncome(), reo.getMortgageMonthlyPayment());
+            netRentalIncome = netRentalIncome.add(split[0]);
+            netRentalDebt   = netRentalDebt.add(split[1]);
         }
         netRentalIncome = money(netRentalIncome);
         netRentalDebt   = money(netRentalDebt);
@@ -122,19 +121,16 @@ public class LoanCalculationService {
 
         // ── 11. DTI ───────────────────────────────────────────────────────────
         // frontEndDti: null if proposedHousing null or totalIncome zero
-        BigDecimal frontEndDti = percentRatio(proposedHousing, totalIncome);
+        BigDecimal frontEndDti = LoanCalcRules.frontEndDti(proposedHousing, totalIncome);
 
         // backEndDti: null if proposedHousing null (housing is the mandatory component)
-        BigDecimal backEndDti = (proposedHousing == null) ? null
-                : percentRatio(proposedHousing.add(nz(totalDebts)), totalIncome);
+        BigDecimal backEndDti = LoanCalcRules.backEndDti(proposedHousing, totalDebts, totalIncome);
 
         // ── 12. Present housing (best-effort — null if unavailable) ───────────
         // Per spec: primary borrower's present-address rentAmount (S3 BorrowerAddress).
         // Deferred/null — no BorrowerAddressRepository injected; spec marks this best-effort.
         BigDecimal presentHousing = null;
-        BigDecimal housingDelta   = (proposedHousing != null && presentHousing != null)
-                ? money(proposedHousing.subtract(presentHousing))
-                : null;
+        BigDecimal housingDelta   = LoanCalcRules.housingDelta(proposedHousing, presentHousing);
 
         // ── 13. Build response ────────────────────────────────────────────────
         return new LoanCalculationResponse(
@@ -165,29 +161,6 @@ public class LoanCalculationService {
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
-
-    /**
-     * LTV basis per spec §2:
-     * PURCHASE  → lesser of salesPrice/appraisedValue; if one is null use the other; both null → null.
-     * non-PURCHASE → appraisedValue; fallback estimatedValue; else null.
-     */
-    private static BigDecimal computeLtvBasis(
-            LoanPurposeType purpose,
-            BigDecimal salesPrice,
-            BigDecimal appraised,
-            BigDecimal estimated) {
-
-        if (purpose == LoanPurposeType.PURCHASE) {
-            if (salesPrice == null && appraised == null) return null;
-            if (salesPrice == null) return appraised;
-            if (appraised == null) return salesPrice;
-            return salesPrice.min(appraised);
-        } else {
-            // REFINANCE / CONSTRUCTION / OTHER / null purpose
-            if (appraised != null) return appraised;
-            return estimated; // null if both absent
-        }
-    }
 
     /**
      * Monthly P&I per spec §4: null if base/rate/term null or term ≤ 0.
