@@ -139,7 +139,7 @@ public class LiabilityService {
         validateValues(l);
         applyAndValidateDtiPairing(l);
 
-        return l;
+        return liabilities.save(l);
     }
 
     @Transactional

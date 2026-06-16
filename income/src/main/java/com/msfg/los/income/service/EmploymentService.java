@@ -97,7 +97,7 @@ public class EmploymentService {
                 req.selfEmployed(), req.ownershipShare(),
                 req.employedByPartyToTransaction(),
                 req.startDate(), req.endDate(), req.monthsInLineOfWork());
-        return e;
+        return employments.save(e);
     }
 
     @Transactional

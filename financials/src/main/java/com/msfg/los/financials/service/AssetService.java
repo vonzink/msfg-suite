@@ -97,7 +97,7 @@ public class AssetService {
         if (req.cashOrMarketValue() != null) asset.setCashOrMarketValue(req.cashOrMarketValue());
         if (req.verified() != null) asset.setVerified(req.verified());
 
-        return asset;
+        return assets.save(asset);
     }
 
     @Transactional

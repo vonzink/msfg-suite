@@ -115,7 +115,7 @@ public class IncomeService {
         item.setEmploymentId(effectiveEmploymentId);   // authoritative: already merged + null-cleared for type switches
         if (req.description() != null) item.setDescription(req.description());
 
-        return item;
+        return income.save(item);
     }
 
     @Transactional
