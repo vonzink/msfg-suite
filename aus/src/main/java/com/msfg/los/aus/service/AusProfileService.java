@@ -11,7 +11,7 @@ import com.msfg.los.aus.web.dto.UpsertAusProfileRequest;
 import com.msfg.los.loan.service.LoanAccessGuard;
 import com.msfg.los.loan.service.LoanService;
 import com.msfg.los.parties.domain.BorrowerParty;
-import com.msfg.los.parties.repo.BorrowerRepository;
+import com.msfg.los.parties.service.BorrowerService;
 import com.msfg.los.platform.error.ValidationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,18 +33,18 @@ public class AusProfileService {
     private final VendorCredentialService credentials;
     private final LoanService loanService;
     private final LoanAccessGuard accessGuard;
-    private final BorrowerRepository borrowers;
+    private final BorrowerService borrowerService;
 
     public AusProfileService(AusProfileRepository profiles,
                              VendorCredentialService credentials,
                              LoanService loanService,
                              LoanAccessGuard accessGuard,
-                             BorrowerRepository borrowers) {
+                             BorrowerService borrowerService) {
         this.profiles = profiles;
         this.credentials = credentials;
         this.loanService = loanService;
         this.accessGuard = accessGuard;
-        this.borrowers = borrowers;
+        this.borrowerService = borrowerService;
     }
 
     private void guard(UUID loanId) {
@@ -78,7 +78,7 @@ public class AusProfileService {
     private AusVendorSettings normalize(UUID loanId, AusVendorSettings s) {
         List<CreditReference> refs = s.creditReferences() == null ? List.of() : s.creditReferences();
         if (!refs.isEmpty()) {
-            Set<UUID> loanBorrowerIds = borrowers.findByLoanIdOrderByOrdinalAsc(loanId).stream()
+            Set<UUID> loanBorrowerIds = borrowerService.listByLoan(loanId).stream()
                     .map(BorrowerParty::getId)
                     .collect(Collectors.toSet());
             for (CreditReference ref : refs) {

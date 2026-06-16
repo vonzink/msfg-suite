@@ -34,12 +34,8 @@ public class ReoService {
         this.tenantContext = tenantContext;
     }
 
-    private UUID org() {
-        return tenantContext.orgId().orElseThrow(() -> new NotFoundException("Tenant", "current"));
-    }
-
     private RealEstateOwned load(UUID loanId, UUID reoId) {
-        return reo.findByIdAndOrgId(reoId, org())
+        return reo.findByIdAndOrgId(reoId, tenantContext.requireOrgId())
                 .filter(x -> x.getLoanId().equals(loanId))
                 .orElseThrow(() -> new NotFoundException("REO", reoId));
     }

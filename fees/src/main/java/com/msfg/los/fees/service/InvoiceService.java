@@ -5,9 +5,7 @@ import com.msfg.los.fees.repo.InvoiceEntryRepository;
 import com.msfg.los.fees.web.dto.UpsertInvoiceRequest;
 import com.msfg.los.loan.service.LoanAccessGuard;
 import com.msfg.los.loan.service.LoanService;
-import com.msfg.los.platform.error.NotFoundException;
 import com.msfg.los.platform.error.ValidationException;
-import com.msfg.los.platform.tenancy.TenantContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,20 +18,13 @@ public class InvoiceService {
     private final InvoiceEntryRepository invoices;
     private final LoanService loanService;
     private final LoanAccessGuard accessGuard;
-    private final TenantContext tenantContext;
 
     public InvoiceService(InvoiceEntryRepository invoices,
                           LoanService loanService,
-                          LoanAccessGuard accessGuard,
-                          TenantContext tenantContext) {
+                          LoanAccessGuard accessGuard) {
         this.invoices = invoices;
         this.loanService = loanService;
         this.accessGuard = accessGuard;
-        this.tenantContext = tenantContext;
-    }
-
-    private UUID org() {
-        return tenantContext.orgId().orElseThrow(() -> new NotFoundException("Tenant", "current"));
     }
 
     @Transactional(readOnly = true)

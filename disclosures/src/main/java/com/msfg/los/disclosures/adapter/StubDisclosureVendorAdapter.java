@@ -9,7 +9,7 @@ import com.msfg.los.disclosures.service.DisclosureGenerationRequest;
 import com.msfg.los.disclosures.service.DisclosureGenerationResult;
 import com.msfg.los.disclosures.service.DisclosureVendorPort;
 import com.msfg.los.disclosures.service.UcdExportResult;
-import com.msfg.los.documents.service.HtmlText;
+import com.msfg.los.platform.text.HtmlText;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;

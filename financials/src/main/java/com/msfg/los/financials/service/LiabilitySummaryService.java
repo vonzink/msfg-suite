@@ -7,7 +7,7 @@ import com.msfg.los.financials.web.dto.LiabilitySummaryRow;
 import com.msfg.los.loan.service.LoanAccessGuard;
 import com.msfg.los.loan.service.LoanService;
 import com.msfg.los.parties.domain.BorrowerParty;
-import com.msfg.los.parties.repo.BorrowerRepository;
+import com.msfg.los.parties.service.BorrowerService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,14 +21,14 @@ import java.util.stream.Collectors;
 public class LiabilitySummaryService {
 
     private final LiabilityRepository liabilities;
-    private final BorrowerRepository borrowers;
+    private final BorrowerService borrowerService;
     private final LoanService loanService;
     private final LoanAccessGuard accessGuard;
 
-    public LiabilitySummaryService(LiabilityRepository liabilities, BorrowerRepository borrowers,
+    public LiabilitySummaryService(LiabilityRepository liabilities, BorrowerService borrowerService,
                                    LoanService loanService, LoanAccessGuard accessGuard) {
         this.liabilities = liabilities;
-        this.borrowers = borrowers;
+        this.borrowerService = borrowerService;
         this.loanService = loanService;
         this.accessGuard = accessGuard;
     }
@@ -37,7 +37,7 @@ public class LiabilitySummaryService {
     public LiabilitySummaryResponse summarize(UUID loanId) {
         accessGuard.assertCanAccess(loanService.get(loanId));
 
-        Map<UUID, String> borrowerNames = borrowers.findByLoanIdOrderByOrdinalAsc(loanId).stream()
+        Map<UUID, String> borrowerNames = borrowerService.listByLoan(loanId).stream()
                 .collect(Collectors.toMap(BorrowerParty::getId, LiabilitySummaryService::fullName));
 
         List<Liability> items = liabilities.findByLoanIdOrderByOrdinalAsc(loanId);
@@ -67,6 +67,21 @@ public class LiabilitySummaryService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         return new LiabilitySummaryResponse(rows, totalMonthlyPayments, dtiMonthlyPayments, totalUnpaidBalance);
+    }
+
+    /**
+     * DTI-included monthly liability payments for a loan — numeric only, no borrower-name map and
+     * no rows.
+     *
+     * <p><b>Unguarded</b>: callable only from an already loan-scoped + access-checked context
+     * (e.g. {@code LoanCalculationService.calculate}, which guards once). The public
+     * {@link #summarize} keeps its guard + rows for the GET summary endpoint. Result equals the
+     * {@code dtiMonthlyPayments} {@code summarize} returns (Σ non-null monthlyPayment where
+     * includeInDti; never null).
+     */
+    @Transactional(readOnly = true)
+    public BigDecimal dtiMonthlyPaymentsForLoan(UUID loanId) {
+        return liabilities.sumDtiMonthlyPaymentsByLoanId(loanId);
     }
 
     private static String fullName(BorrowerParty b) {

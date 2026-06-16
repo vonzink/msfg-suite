@@ -1,8 +1,18 @@
 spring:
   datasource:
+    # RUNTIME datasource = the NON-OWNER application role (the seeded app_user), so Postgres RLS is
+    # engaged as the DB-layer tenant-isolation backstop. Provision app_user a LOGIN credential
+    # out-of-band (Phase-6 ops): ALTER ROLE app_user LOGIN PASSWORD '<secret>';
+    # GRANT CONNECT ON DATABASE <db> TO app_user;  (see V4__app_role.sql). Point DB_USER at it.
     url: ${DB_URL}
     username: ${DB_USER}
     password: ${DB_PASSWORD}
+  flyway:
+    # MIGRATIONS run as the OWNER role (owns the tables / DDL). Until split out, Flyway shares the
+    # runtime datasource; once the owner-vs-runtime split is provisioned, set the Flyway-specific
+    # owner credentials here:
+    # user: ${DB_OWNER_USER}
+    # password: ${DB_OWNER_PASSWORD}
   security:
     oauth2:
       resourceserver:
@@ -13,3 +23,8 @@ los:
     # Set the real frontend origin(s) for production here, or via LOS_CORS_ALLOWED_ORIGINS env var.
     # Example: los.cors.allowed-origins: https://app.msfgco.com
     # allowed-origins: https://app.msfgco.com
+  security:
+    # MUST be true in production once the runtime datasource points at the non-owner app_user role:
+    # a non-RLS (owner/superuser) deployment then fails startup loudly instead of running with the
+    # DB-layer RLS backstop silently dormant.
+    enforce-rls-runtime-role: ${LOS_ENFORCE_RLS_RUNTIME_ROLE:false}

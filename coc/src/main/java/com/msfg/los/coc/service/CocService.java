@@ -45,10 +45,6 @@ public class CocService {
         this.currentUser = currentUser;
     }
 
-    private UUID org() {
-        return tenantContext.orgId().orElseThrow(() -> new NotFoundException("Tenant", "current"));
-    }
-
     @Transactional
     public CocHistoryEntry submit(UUID loanId, CocSubmitRequest req) {
         accessGuard.assertCanAccess(loanService.get(loanId));
@@ -77,6 +73,17 @@ public class CocService {
         return history.findByLoanIdOrderBySubmittedAtDesc(loanId);
     }
 
+    /**
+     * Cross-module read seam: the most recent CoC history entry for a loan in a given status (e.g.
+     * the latest {@link CocStatus#ACCEPTED} entry that re-establishes good faith), tenant-scoped,
+     * WITHOUT a loan access decision — internal disclosure-timing callers have already authorized.
+     * Mirrors the raw {@code findTopByLoanIdAndStatusOrderByDecisionDateDesc} query.
+     */
+    @Transactional(readOnly = true)
+    public java.util.Optional<CocHistoryEntry> latestByStatus(UUID loanId, CocStatus status) {
+        return history.findTopByLoanIdAndStatusOrderByDecisionDateDesc(loanId, status);
+    }
+
     @Transactional
     public CocHistoryEntry decide(UUID loanId, UUID entryId, CocDecision decision, Set<String> authorities) {
         accessGuard.assertCanAccess(loanService.get(loanId));
@@ -85,7 +92,7 @@ public class CocService {
             throw new ForbiddenException("Decision requires UNDERWRITER");
         }
 
-        CocHistoryEntry entry = history.findByIdAndOrgId(entryId, org())
+        CocHistoryEntry entry = history.findByIdAndOrgId(entryId, tenantContext.requireOrgId())
                 .filter(e -> e.getLoanId().equals(loanId))
                 .orElseThrow(() -> new NotFoundException("CoC entry", entryId));
 

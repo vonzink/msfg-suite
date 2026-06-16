@@ -29,9 +29,8 @@ public class BorrowerService {
         this.tenantContext = tenantContext; this.piiAccessRecorder = piiAccessRecorder;
     }
 
-    private UUID org() { return tenantContext.orgId().orElseThrow(() -> new NotFoundException("Tenant", "current")); }
     private BorrowerParty load(UUID loanId, UUID borrowerId) {
-        return borrowers.findByIdAndOrgId(borrowerId, org())
+        return borrowers.findByIdAndOrgId(borrowerId, tenantContext.requireOrgId())
             .filter(x -> x.getLoanId().equals(loanId))
             .orElseThrow(() -> new NotFoundException("Borrower", borrowerId));
     }
@@ -55,6 +54,29 @@ public class BorrowerService {
     public List<BorrowerParty> list(UUID loanId) {
         accessGuard.assertCanAccess(loanService.get(loanId));
         return borrowers.findByLoanIdOrderByOrdinalAsc(loanId);
+    }
+
+    /**
+     * Cross-module read seam: the loan's borrowers, tenant-scoped and ordinal-ordered, WITHOUT a
+     * loan access decision. Callers in other modules guard loan access themselves (and have already
+     * done so) before reading borrower membership — this mirrors the raw repository query they used
+     * to make directly. Returns the {@code @TenantId}-filtered list ({@code findByLoanIdOrderByOrdinalAsc}).
+     */
+    @Transactional(readOnly = true)
+    public List<BorrowerParty> listByLoan(UUID loanId) {
+        return borrowers.findByLoanIdOrderByOrdinalAsc(loanId);
+    }
+
+    /**
+     * Cross-module read seam: true iff a borrower with this id exists in the caller's tenant AND
+     * belongs to the given loan. Mirrors {@code findByIdAndOrgId(borrowerId, requireOrgId()).filter(loan match)}
+     * exactly; returns a boolean so each caller keeps its own miss semantics (NotFound vs Validation).
+     */
+    @Transactional(readOnly = true)
+    public boolean isBorrowerInLoan(UUID loanId, UUID borrowerId) {
+        return borrowers.findByIdAndOrgId(borrowerId, tenantContext.requireOrgId())
+            .filter(b -> b.getLoanId().equals(loanId))
+            .isPresent();
     }
 
     @Transactional

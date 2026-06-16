@@ -23,6 +23,7 @@ import com.msfg.los.pricing.web.dto.LockTermsRequest;
 import com.msfg.los.pricing.web.dto.PricingResponse;
 import com.msfg.los.pricing.web.dto.RateChangeRequest;
 import com.msfg.los.qualification.service.LoanCalculationService;
+import com.msfg.los.qualification.web.dto.LoanCalculationResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -71,8 +72,17 @@ public class PricingService {
     public PricingResponse view(UUID loanId) {
         Loan loan = loanService.get(loanId);
         accessGuard.assertCanAccess(loan);
+        return buildView(loan, calculations.calculate(loanId));
+    }
+
+    /**
+     * Build the pricing view from an already-loaded loan and an already-computed calc snapshot, so
+     * the mutating actions can reuse the single calc they computed for re-quoting (S2 — one calc
+     * per write instead of two: requoteAndRecord + view each previously ran a full pass).
+     */
+    private PricingResponse buildView(Loan loan, LoanCalculationResponse calc) {
+        UUID loanId = loan.getId();
         RateLock lock = locks.findByLoanId(loanId).orElse(null);
-        var calc = calculations.calculate(loanId);
         String exactRateType = loan.getAmortizationType() == null ? null : loan.getAmortizationType().name();
 
         if (lock == null) {
@@ -105,49 +115,43 @@ public class PricingService {
         Loan loan = loadGuarded(loanId);
         assertNotTerminal(loan);
         RateLock lock = locks.findByLoanId(loanId).orElse(null);
-        if (lock != null && RateLockStatus.effective(lock.getExpirationDate(), today()) == RateLockStatus.EXPIRED) {
-            throw new LockStateConflictException("Lock is EXPIRED — use relock");
-        }
+        LockTransitions.assertAllowed(effectiveStatus(lock), LockAction.CONTROL_YOUR_PRICE);
         if (lock == null) {
             lock = new RateLock();
             lock.setLoanId(loanId);
         }
         applyTerms(lock, req);
         lock.setExtensionDaysTotal(0);
-        requoteAndRecord(loan, lock, LockAction.CONTROL_YOUR_PRICE);
-        return view(loanId);
+        return requoteRecordAndView(loan, lock, LockAction.CONTROL_YOUR_PRICE);
     }
 
     @Transactional
     public PricingResponse extend(UUID loanId, ExtendLockRequest req) {
         Loan loan = loadGuarded(loanId);
         assertNotTerminal(loan);
-        RateLock lock = requireLockInState(loanId, RateLockStatus.LOCKED, "extend");
+        RateLock lock = requireLock(loanId, LockAction.EXTEND);
         lock.setExpirationDate(lock.getExpirationDate().plusDays(req.additionalDays()));
         lock.setExtensionDaysTotal(lock.getExtensionDaysTotal() + req.additionalDays());
-        requoteAndRecord(loan, lock, LockAction.EXTEND);
-        return view(loanId);
+        return requoteRecordAndView(loan, lock, LockAction.EXTEND);
     }
 
     @Transactional
     public PricingResponse rateChange(UUID loanId, RateChangeRequest req) {
         Loan loan = loadGuarded(loanId);
         assertNotTerminal(loan);
-        RateLock lock = requireLockInState(loanId, RateLockStatus.LOCKED, "rate-change");
+        RateLock lock = requireLock(loanId, LockAction.RATE_CHANGE);
         lock.setLockedRate(req.rate());
-        requoteAndRecord(loan, lock, LockAction.RATE_CHANGE);
-        return view(loanId);
+        return requoteRecordAndView(loan, lock, LockAction.RATE_CHANGE);
     }
 
     @Transactional
     public PricingResponse relock(UUID loanId, LockTermsRequest req) {
         Loan loan = loadGuarded(loanId);
         assertNotTerminal(loan);
-        RateLock lock = requireLockInState(loanId, RateLockStatus.EXPIRED, "relock");
+        RateLock lock = requireLock(loanId, LockAction.RELOCK);
         applyTerms(lock, req);
         lock.setExtensionDaysTotal(0);
-        requoteAndRecord(loan, lock, LockAction.RELOCK);
-        return view(loanId);
+        return requoteRecordAndView(loan, lock, LockAction.RELOCK);
     }
 
     @Transactional
@@ -160,6 +164,23 @@ public class PricingService {
                 + DateTimeFormatter.BASIC_ISO_DATE.format(today()) + ".html";
         return documentService.storeGenerated(loanId, DocumentType.LOCK_CONFIRMATION,
                 "PRICING", fileName, "text/html", html.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** Effective lock status of a (possibly null) lock — NOT_LOCKED when absent. */
+    private RateLockStatus effectiveStatus(RateLock lock) {
+        return lock == null ? RateLockStatus.NOT_LOCKED
+                : RateLockStatus.effective(lock.getExpirationDate(), today());
+    }
+
+    /**
+     * Load the lock, assert {@code action} is permitted from its effective status via the pure
+     * {@link LockTransitions} table (throws 409 LOCK_STATE_CONFLICT otherwise), and return it for
+     * mutation. Used by the EXTEND/RATE_CHANGE/RELOCK transitions.
+     */
+    private RateLock requireLock(UUID loanId, LockAction action) {
+        RateLock lock = locks.findByLoanId(loanId).orElse(null);
+        LockTransitions.assertAllowed(effectiveStatus(lock), action);
+        return lock; // non-null: NOT_LOCKED would have thrown for these actions
     }
 
     private RateLock requireLockInState(UUID loanId, RateLockStatus required, String action) {
@@ -197,9 +218,18 @@ public class PricingService {
         lock.setInterviewerEmail(currentUser.email().orElse(null));
     }
 
+    /**
+     * Compute the loan calc ONCE, re-quote+record with it, then build the response view from the
+     * SAME calc (S2 — previously each write ran two full calc passes: requoteAndRecord + view).
+     */
+    private PricingResponse requoteRecordAndView(Loan loan, RateLock lock, LockAction action) {
+        LoanCalculationResponse calc = calculations.calculate(loan.getId());
+        requoteAndRecord(loan, lock, action, calc);
+        return buildView(loan, calc);
+    }
+
     /** Quote via the port, replace the adjustment snapshot, persist lock, append audit event. */
-    private void requoteAndRecord(Loan loan, RateLock lock, LockAction action) {
-        var calc = calculations.calculate(loan.getId());
+    private void requoteAndRecord(Loan loan, RateLock lock, LockAction action, LoanCalculationResponse calc) {
         if (calc.totalLoanAmount() == null) {
             throw new LoanNotPriceableException("Loan has no base loan amount — cannot price");
         }

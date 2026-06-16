@@ -5,9 +5,8 @@ import com.msfg.los.declarations.repo.BorrowerDeclarationsRepository;
 import com.msfg.los.declarations.web.dto.DeclarationsRequest;
 import com.msfg.los.loan.service.LoanAccessGuard;
 import com.msfg.los.loan.service.LoanService;
-import com.msfg.los.parties.repo.BorrowerRepository;
+import com.msfg.los.parties.service.BorrowerService;
 import com.msfg.los.platform.error.NotFoundException;
-import com.msfg.los.platform.tenancy.TenantContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,32 +17,24 @@ import java.util.UUID;
 public class DeclarationsService {
 
     private final BorrowerDeclarationsRepository repo;
-    private final BorrowerRepository borrowers;
+    private final BorrowerService borrowerService;
     private final LoanService loanService;
     private final LoanAccessGuard accessGuard;
-    private final TenantContext tenantContext;
 
     public DeclarationsService(BorrowerDeclarationsRepository repo,
-                               BorrowerRepository borrowers,
+                               BorrowerService borrowerService,
                                LoanService loanService,
-                               LoanAccessGuard accessGuard,
-                               TenantContext tenantContext) {
+                               LoanAccessGuard accessGuard) {
         this.repo = repo;
-        this.borrowers = borrowers;
+        this.borrowerService = borrowerService;
         this.loanService = loanService;
         this.accessGuard = accessGuard;
-        this.tenantContext = tenantContext;
-    }
-
-    private UUID org() {
-        return tenantContext.orgId().orElseThrow(() -> new NotFoundException("Tenant", "current"));
     }
 
     private void assertBorrowerInLoan(UUID loanId, UUID borrowerId) {
         accessGuard.assertCanAccess(loanService.get(loanId));
-        borrowers.findByIdAndOrgId(borrowerId, org())
-                .filter(b -> b.getLoanId().equals(loanId))
-                .orElseThrow(() -> new NotFoundException("Borrower", borrowerId));
+        if (!borrowerService.isBorrowerInLoan(loanId, borrowerId))
+            throw new NotFoundException("Borrower", borrowerId);
     }
 
     @Transactional(readOnly = true)

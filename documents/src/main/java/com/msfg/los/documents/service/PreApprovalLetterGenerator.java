@@ -1,6 +1,7 @@
 package com.msfg.los.documents.service;
 
 import com.msfg.los.loan.domain.Loan;
+import com.msfg.los.platform.text.HtmlText;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;

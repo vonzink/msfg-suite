@@ -2,7 +2,7 @@ package com.msfg.los.disclosures.service;
 
 import com.msfg.los.coc.domain.CocHistoryEntry;
 import com.msfg.los.coc.domain.CocStatus;
-import com.msfg.los.coc.repo.CocHistoryEntryRepository;
+import com.msfg.los.coc.service.CocService;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -21,12 +21,12 @@ import java.util.UUID;
 @Service
 public class RevisedLeClockService {
 
-    private final CocHistoryEntryRepository cocRepo;
+    private final CocService cocService;
     private final DisclosureTimingService timingService;
 
-    public RevisedLeClockService(CocHistoryEntryRepository cocRepo,
+    public RevisedLeClockService(CocService cocService,
                                  DisclosureTimingService timingService) {
-        this.cocRepo = cocRepo;
+        this.cocService = cocService;
         this.timingService = timingService;
     }
 
@@ -36,7 +36,7 @@ public class RevisedLeClockService {
      * that decision date.
      */
     public LocalDate revisedLeDeadline(UUID loanId) {
-        return cocRepo.findTopByLoanIdAndStatusOrderByDecisionDateDesc(loanId, CocStatus.ACCEPTED)
+        return cocService.latestByStatus(loanId, CocStatus.ACCEPTED)
                 .map(CocHistoryEntry::getDecisionDate)
                 .filter(java.util.Objects::nonNull)
                 .map(instant -> timingService.revisedLeDeadline(instant.atZone(ZoneOffset.UTC).toLocalDate()))

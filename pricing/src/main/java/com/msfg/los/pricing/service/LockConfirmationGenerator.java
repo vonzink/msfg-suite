@@ -1,9 +1,9 @@
 package com.msfg.los.pricing.service;
 
-import com.msfg.los.documents.service.HtmlText;
 import com.msfg.los.loan.domain.Loan;
 import com.msfg.los.pricing.domain.PricingAdjustment;
 import com.msfg.los.pricing.domain.RateLock;
+import com.msfg.los.platform.text.HtmlText;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;

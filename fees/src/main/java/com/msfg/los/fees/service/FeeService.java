@@ -35,12 +35,8 @@ public class FeeService {
         this.tenantContext = tenantContext;
     }
 
-    private UUID org() {
-        return tenantContext.orgId().orElseThrow(() -> new NotFoundException("Tenant", "current"));
-    }
-
     private FeeLineItem load(UUID loanId, UUID feeId) {
-        return fees.findByIdAndOrgId(feeId, org())
+        return fees.findByIdAndOrgId(feeId, tenantContext.requireOrgId())
                 .filter(f -> f.getLoanId().equals(loanId))
                 .orElseThrow(() -> new NotFoundException("FeeLineItem", feeId));
     }
@@ -113,6 +109,17 @@ public class FeeService {
     @Transactional(readOnly = true)
     public List<FeeLineItem> list(UUID loanId) {
         accessGuard.assertCanAccess(loanService.get(loanId));
+        return fees.findByLoanIdOrderByOrdinalAscIdAsc(loanId);
+    }
+
+    /**
+     * Cross-module read seam: the loan's fee line items, tenant-scoped and ordinal-ordered, WITHOUT
+     * a loan access decision — the disclosure-assembly caller has already guarded access (its reload
+     * here is a tenant-scoped reload, not an access decision). Mirrors the raw
+     * {@code findByLoanIdOrderByOrdinalAscIdAsc} query.
+     */
+    @Transactional(readOnly = true)
+    public List<FeeLineItem> lineItemsForLoan(UUID loanId) {
         return fees.findByLoanIdOrderByOrdinalAscIdAsc(loanId);
     }
 

@@ -101,10 +101,6 @@ public class DisclosureIssuanceService {
         this.revisedLeClockService = revisedLeClockService;
     }
 
-    private UUID org() {
-        return tenantContext.orgId().orElseThrow(() -> new NotFoundException("Tenant", "current"));
-    }
-
     @Transactional
     public DisclosureIssuance issue(UUID loanId, DisclosureKind kind, IssueDisclosureRequest req) {
         // Guard FIRST: 404 cross-tenant / 403 by role before anything is generated or persisted.
@@ -363,7 +359,7 @@ public class DisclosureIssuanceService {
     }
 
     private DisclosureIssuance loadInLoan(UUID loanId, UUID disclosureId) {
-        return issuanceRepo.findByIdAndOrgId(disclosureId, org())
+        return issuanceRepo.findByIdAndOrgId(disclosureId, tenantContext.requireOrgId())
                 .filter(i -> i.getLoanId().equals(loanId))
                 .orElseThrow(() -> new NotFoundException("Disclosure", disclosureId));
     }

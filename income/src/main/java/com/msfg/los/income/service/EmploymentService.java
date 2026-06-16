@@ -9,7 +9,7 @@ import com.msfg.los.income.web.dto.AddEmploymentRequest;
 import com.msfg.los.income.web.dto.UpdateEmploymentRequest;
 import com.msfg.los.loan.service.LoanAccessGuard;
 import com.msfg.los.loan.service.LoanService;
-import com.msfg.los.parties.repo.BorrowerRepository;
+import com.msfg.los.parties.service.BorrowerService;
 import com.msfg.los.platform.error.NotFoundException;
 import com.msfg.los.platform.error.ValidationException;
 import com.msfg.los.platform.reference.UsStateCode;
@@ -25,31 +25,33 @@ import java.util.UUID;
 public class EmploymentService {
 
     private final EmploymentRepository employments;
-    private final BorrowerRepository borrowers;
+    private final BorrowerService borrowerService;
     private final LoanService loanService;
     private final LoanAccessGuard accessGuard;
     private final TenantContext tenantContext;
 
-    public EmploymentService(EmploymentRepository employments, BorrowerRepository borrowers,
+    public EmploymentService(EmploymentRepository employments, BorrowerService borrowerService,
                              LoanService loanService, LoanAccessGuard accessGuard,
                              TenantContext tenantContext) {
         this.employments = employments;
-        this.borrowers = borrowers;
+        this.borrowerService = borrowerService;
         this.loanService = loanService;
         this.accessGuard = accessGuard;
         this.tenantContext = tenantContext;
     }
 
-    private UUID org() {
-        return tenantContext.orgId().orElseThrow(() -> new NotFoundException("Tenant", "current"));
-    }
-
     /** Verify the loan is in the caller's org + owned, and the borrower belongs to that loan. */
     private void assertBorrowerInLoan(UUID loanId, UUID borrowerId) {
         accessGuard.assertCanAccess(loanService.get(loanId));   // 404 cross-org loan, 403 not owner
-        borrowers.findByIdAndOrgId(borrowerId, org())
-                .filter(b -> b.getLoanId().equals(loanId))
-                .orElseThrow(() -> new NotFoundException("Borrower", borrowerId));
+        if (!borrowerService.isBorrowerInLoan(loanId, borrowerId))
+            throw new NotFoundException("Borrower", borrowerId);
+    }
+
+    // max+1, not count — count reuses ordinals after a delete and collides
+    private int nextOrdinal(UUID borrowerId) {
+        return employments.findTopByBorrowerIdOrderByOrdinalDesc(borrowerId)
+                .map(x -> x.getOrdinal() + 1)
+                .orElse(0);
     }
 
     @Transactional
@@ -58,7 +60,7 @@ public class EmploymentService {
         Employment e = new Employment();
         e.setLoanId(loanId);
         e.setBorrowerId(borrowerId);
-        e.setOrdinal((int) employments.countByBorrowerId(borrowerId));
+        e.setOrdinal(nextOrdinal(borrowerId));
         applyAndValidate(e,
                 req.employerName(), req.employerPhone(),
                 req.employerAddressLine1(), req.employerAddressLine2(),
@@ -73,13 +75,13 @@ public class EmploymentService {
     @Transactional(readOnly = true)
     public List<Employment> list(UUID loanId, UUID borrowerId) {
         assertBorrowerInLoan(loanId, borrowerId);
-        return employments.findByBorrowerIdOrderByOrdinalAsc(borrowerId);
+        return employments.findByBorrowerIdOrderByOrdinalAscIdAsc(borrowerId);
     }
 
     @Transactional
     public Employment update(UUID loanId, UUID borrowerId, UUID employmentId, UpdateEmploymentRequest req) {
         assertBorrowerInLoan(loanId, borrowerId);
-        Employment e = employments.findByIdAndOrgId(employmentId, org())
+        Employment e = employments.findByIdAndOrgId(employmentId, tenantContext.requireOrgId())
                 .filter(x -> x.getBorrowerId().equals(borrowerId))
                 .orElseThrow(() -> new NotFoundException("Employment", employmentId));
         applyAndValidate(e,
@@ -90,13 +92,13 @@ public class EmploymentService {
                 req.selfEmployed(), req.ownershipShare(),
                 req.employedByPartyToTransaction(),
                 req.startDate(), req.endDate(), req.monthsInLineOfWork());
-        return e;
+        return employments.save(e);
     }
 
     @Transactional
     public void delete(UUID loanId, UUID borrowerId, UUID employmentId) {
         assertBorrowerInLoan(loanId, borrowerId);
-        Employment e = employments.findByIdAndOrgId(employmentId, org())
+        Employment e = employments.findByIdAndOrgId(employmentId, tenantContext.requireOrgId())
                 .filter(x -> x.getBorrowerId().equals(borrowerId))
                 .orElseThrow(() -> new NotFoundException("Employment", employmentId));
         employments.delete(e);

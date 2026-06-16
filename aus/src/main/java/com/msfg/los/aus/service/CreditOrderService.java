@@ -15,7 +15,7 @@ import com.msfg.los.documents.service.DocumentService;
 import com.msfg.los.loan.service.LoanAccessGuard;
 import com.msfg.los.loan.service.LoanService;
 import com.msfg.los.parties.domain.BorrowerParty;
-import com.msfg.los.parties.repo.BorrowerRepository;
+import com.msfg.los.parties.service.BorrowerService;
 import com.msfg.los.platform.error.ValidationException;
 import com.msfg.los.platform.security.CurrentUser;
 import org.springframework.stereotype.Service;
@@ -42,7 +42,7 @@ public class CreditOrderService {
     private final DocumentService documentService;
     private final LoanService loanService;
     private final LoanAccessGuard accessGuard;
-    private final BorrowerRepository borrowers;
+    private final BorrowerService borrowerService;
     private final AusProfileRepository profiles;
     private final VendorCredentialService credentials;
     private final CurrentUser currentUser;
@@ -52,7 +52,7 @@ public class CreditOrderService {
                               DocumentService documentService,
                               LoanService loanService,
                               LoanAccessGuard accessGuard,
-                              BorrowerRepository borrowers,
+                              BorrowerService borrowerService,
                               AusProfileRepository profiles,
                               VendorCredentialService credentials,
                               CurrentUser currentUser) {
@@ -61,7 +61,7 @@ public class CreditOrderService {
         this.documentService = documentService;
         this.loanService = loanService;
         this.accessGuard = accessGuard;
-        this.borrowers = borrowers;
+        this.borrowerService = borrowerService;
         this.profiles = profiles;
         this.credentials = credentials;
         this.currentUser = currentUser;
@@ -86,7 +86,7 @@ public class CreditOrderService {
         }
         // Every requested borrower must be a member of this loan (loaded once, @TenantId-filtered).
         Map<UUID, BorrowerParty> loanBorrowers = new HashMap<>();
-        for (BorrowerParty b : borrowers.findByLoanIdOrderByOrdinalAsc(loanId)) {
+        for (BorrowerParty b : borrowerService.listByLoan(loanId)) {
             loanBorrowers.put(b.getId(), b);
         }
         for (UUID borrowerId : req.borrowerIds()) {
@@ -121,7 +121,7 @@ public class CreditOrderService {
      */
     @Transactional
     public String orderForAusRun(UUID loanId, String providerCode) {
-        List<BorrowerParty> all = borrowers.findByLoanIdOrderByOrdinalAsc(loanId);
+        List<BorrowerParty> all = borrowerService.listByLoan(loanId);
         CreditRequestType requestType = all.size() > 1
                 ? CreditRequestType.JOINT : CreditRequestType.INDIVIDUAL;
         return execute(loanId, providerCode, CreditOrderAction.SUBMIT, requestType,

@@ -3,12 +3,12 @@ package com.msfg.los.documents.service;
 import com.msfg.los.documents.domain.Document;
 import com.msfg.los.documents.domain.DocumentType;
 import com.msfg.los.documents.repo.DocumentRepository;
-import com.msfg.los.documents.storage.DocumentStoragePort;
 import com.msfg.los.loan.service.LoanAccessGuard;
 import com.msfg.los.loan.service.LoanService;
 import com.msfg.los.loan.service.PrimaryBorrowerNameResolver;
 import com.msfg.los.platform.error.NotFoundException;
 import com.msfg.los.platform.error.ValidationException;
+import com.msfg.los.platform.storage.BlobStoragePort;
 import com.msfg.los.platform.tenancy.TenantContext;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -25,7 +25,7 @@ import java.util.UUID;
 public class DocumentService {
 
     private final DocumentRepository documents;
-    private final DocumentStoragePort port;
+    private final BlobStoragePort port;
     private final LoanService loanService;
     private final LoanAccessGuard accessGuard;
     private final TenantContext tenantContext;
@@ -33,7 +33,7 @@ public class DocumentService {
     private final PreApprovalLetterGenerator generator;
 
     public DocumentService(DocumentRepository documents,
-                           DocumentStoragePort port,
+                           BlobStoragePort port,
                            LoanService loanService,
                            LoanAccessGuard accessGuard,
                            TenantContext tenantContext,
@@ -46,10 +46,6 @@ public class DocumentService {
         this.tenantContext = tenantContext;
         this.borrowerNameResolver = borrowerNameResolver;
         this.generator = generator;
-    }
-
-    private UUID org() {
-        return tenantContext.orgId().orElseThrow(() -> new NotFoundException("Tenant", "current"));
     }
 
     @Transactional
@@ -87,7 +83,7 @@ public class DocumentService {
     @Transactional(readOnly = true)
     public DownloadResult load(UUID loanId, UUID docId) {
         accessGuard.assertCanAccess(loanService.get(loanId));
-        Document doc = documents.findByIdAndOrgId(docId, org())
+        Document doc = documents.findByIdAndOrgId(docId, tenantContext.requireOrgId())
                 .filter(d -> d.getLoanId().equals(loanId))
                 .orElseThrow(() -> new NotFoundException("Document", docId));
         byte[] bytes = port.load(doc.getStorageKey());
@@ -97,7 +93,7 @@ public class DocumentService {
     @Transactional
     public void delete(UUID loanId, UUID docId) {
         accessGuard.assertCanAccess(loanService.get(loanId));
-        Document doc = documents.findByIdAndOrgId(docId, org())
+        Document doc = documents.findByIdAndOrgId(docId, tenantContext.requireOrgId())
                 .filter(d -> d.getLoanId().equals(loanId))
                 .orElseThrow(() -> new NotFoundException("Document", docId));
         port.delete(doc.getStorageKey());

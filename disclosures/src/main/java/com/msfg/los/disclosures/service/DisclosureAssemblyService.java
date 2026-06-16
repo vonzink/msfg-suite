@@ -7,7 +7,7 @@ import com.msfg.los.disclosures.domain.DisclosureSnapshot;
 import com.msfg.los.disclosures.domain.ToleranceBucket;
 import com.msfg.los.disclosures.tolerance.TolerancePolicy;
 import com.msfg.los.fees.domain.FeeLineItem;
-import com.msfg.los.fees.repo.FeeLineItemRepository;
+import com.msfg.los.fees.service.FeeService;
 import com.msfg.los.loan.domain.Loan;
 import com.msfg.los.loan.service.LoanService;
 import com.msfg.los.qualification.service.LoanCalculationService;
@@ -34,16 +34,16 @@ import java.util.UUID;
 public class DisclosureAssemblyService {
 
     private final LoanService loanService;
-    private final FeeLineItemRepository feeRepo;
+    private final FeeService feeService;
     private final TolerancePolicy tolerancePolicy;
     private final LoanCalculationService calculationService;
 
     public DisclosureAssemblyService(LoanService loanService,
-                                     FeeLineItemRepository feeRepo,
+                                     FeeService feeService,
                                      TolerancePolicy tolerancePolicy,
                                      LoanCalculationService calculationService) {
         this.loanService = loanService;
-        this.feeRepo = feeRepo;
+        this.feeService = feeService;
         this.tolerancePolicy = tolerancePolicy;
         this.calculationService = calculationService;
     }
@@ -56,7 +56,7 @@ public class DisclosureAssemblyService {
         Loan loan = loanService.get(loanId);
 
         // ── Cost rows from fee line items, each tagged with its TRID tolerance bucket ──
-        List<FeeLineItem> fees = feeRepo.findByLoanIdOrderByOrdinalAscIdAsc(loanId);
+        List<FeeLineItem> fees = feeService.lineItemsForLoan(loanId);
         List<DisclosureCostRow> costRows = new ArrayList<>();
         BigDecimal totalClosingCosts = BigDecimal.ZERO;
         BigDecimal prepaidFinanceCharges = BigDecimal.ZERO;

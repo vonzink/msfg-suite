@@ -7,7 +7,7 @@ import com.msfg.los.aus.service.CreditVendorPort;
 import com.msfg.los.aus.service.CreditVendorRequest;
 import com.msfg.los.aus.service.CreditVendorResult;
 import com.msfg.los.aus.service.VendorArtifact;
-import com.msfg.los.documents.service.HtmlText;
+import com.msfg.los.platform.text.HtmlText;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;

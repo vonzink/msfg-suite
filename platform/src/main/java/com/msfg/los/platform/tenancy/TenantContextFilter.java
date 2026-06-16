@@ -25,10 +25,13 @@ public class TenantContextFilter extends OncePerRequestFilter {
                     try {
                         TenantContextHolder.set(UUID.fromString(claim.toString().trim()));
                     } catch (IllegalArgumentException ignored) {
-                        // Malformed org_id: leave tenant unset (OrgTenantResolver -> NIL -> reads match no rows).
+                        // Malformed org_id: set the NIL sentinel EXPLICITLY so the fail-closed intent is
+                        // visible at this layer (NIL -> @TenantId queries match no rows), rather than
+                        // relying on OrgTenantResolver silently substituting NIL for an unset tenant.
                         // The authoritative fail-closed reject for the real non-local JWT path is
                         // OrgScopedJwtAuthenticationConverter; this guard only prevents a raw 500 if any path
                         // (e.g. a test post-processor) ever supplies a present-but-invalid claim.
+                        TenantContextHolder.set(OrgTenantResolver.NIL);
                     }
                 }
             }

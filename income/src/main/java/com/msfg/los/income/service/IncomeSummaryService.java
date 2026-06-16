@@ -9,7 +9,7 @@ import com.msfg.los.income.web.dto.IncomeSummaryRow;
 import com.msfg.los.loan.service.LoanAccessGuard;
 import com.msfg.los.loan.service.LoanService;
 import com.msfg.los.parties.domain.BorrowerParty;
-import com.msfg.los.parties.repo.BorrowerRepository;
+import com.msfg.los.parties.service.BorrowerService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,16 +25,16 @@ public class IncomeSummaryService {
 
     private final IncomeItemRepository income;
     private final EmploymentRepository employments;
-    private final BorrowerRepository borrowers;
+    private final BorrowerService borrowerService;
     private final LoanService loanService;
     private final LoanAccessGuard accessGuard;
 
     public IncomeSummaryService(IncomeItemRepository income, EmploymentRepository employments,
-                                BorrowerRepository borrowers, LoanService loanService,
+                                BorrowerService borrowerService, LoanService loanService,
                                 LoanAccessGuard accessGuard) {
         this.income = income;
         this.employments = employments;
-        this.borrowers = borrowers;
+        this.borrowerService = borrowerService;
         this.loanService = loanService;
         this.accessGuard = accessGuard;
     }
@@ -43,7 +43,7 @@ public class IncomeSummaryService {
     public IncomeSummaryResponse summarize(UUID loanId) {
         accessGuard.assertCanAccess(loanService.get(loanId));   // 404 cross-org, 403 not owner
 
-        Map<UUID, String> borrowerNames = borrowers.findByLoanIdOrderByOrdinalAsc(loanId).stream()
+        Map<UUID, String> borrowerNames = borrowerService.listByLoan(loanId).stream()
                 .collect(Collectors.toMap(BorrowerParty::getId, IncomeSummaryService::fullName));
 
         Map<UUID, String> employerNames = new HashMap<>();
@@ -67,6 +67,19 @@ public class IncomeSummaryService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         return new IncomeSummaryResponse(rows, total);
+    }
+
+    /**
+     * Total monthly income for a loan — numeric only, no borrower-name map and no rows.
+     *
+     * <p><b>Unguarded</b>: callable only from an already loan-scoped + access-checked context
+     * (e.g. {@code LoanCalculationService.calculate}, which guards once). The public
+     * {@link #summarize} keeps its guard + rows for the GET summary endpoint. Result is the same
+     * {@code totalMonthlyIncome} {@code summarize} returns (Σ non-null monthlyAmount; never null).
+     */
+    @Transactional(readOnly = true)
+    public BigDecimal totalMonthlyIncomeForLoan(UUID loanId) {
+        return income.sumMonthlyAmountByLoanId(loanId);
     }
 
     private static String fullName(BorrowerParty b) {

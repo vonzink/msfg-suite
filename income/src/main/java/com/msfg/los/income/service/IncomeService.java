@@ -8,7 +8,7 @@ import com.msfg.los.income.web.dto.AddIncomeRequest;
 import com.msfg.los.income.web.dto.UpdateIncomeRequest;
 import com.msfg.los.loan.service.LoanAccessGuard;
 import com.msfg.los.loan.service.LoanService;
-import com.msfg.los.parties.repo.BorrowerRepository;
+import com.msfg.los.parties.service.BorrowerService;
 import com.msfg.los.platform.error.NotFoundException;
 import com.msfg.los.platform.error.ValidationException;
 import com.msfg.los.platform.tenancy.TenantContext;
@@ -24,38 +24,40 @@ public class IncomeService {
 
     private final IncomeItemRepository income;
     private final EmploymentRepository employments;
-    private final BorrowerRepository borrowers;
+    private final BorrowerService borrowerService;
     private final LoanService loanService;
     private final LoanAccessGuard accessGuard;
     private final TenantContext tenantContext;
 
     public IncomeService(IncomeItemRepository income, EmploymentRepository employments,
-                         BorrowerRepository borrowers, LoanService loanService,
+                         BorrowerService borrowerService, LoanService loanService,
                          LoanAccessGuard accessGuard, TenantContext tenantContext) {
         this.income = income;
         this.employments = employments;
-        this.borrowers = borrowers;
+        this.borrowerService = borrowerService;
         this.loanService = loanService;
         this.accessGuard = accessGuard;
         this.tenantContext = tenantContext;
     }
 
-    private UUID org() {
-        return tenantContext.orgId().orElseThrow(() -> new NotFoundException("Tenant", "current"));
-    }
-
     private void assertBorrowerInLoan(UUID loanId, UUID borrowerId) {
         accessGuard.assertCanAccess(loanService.get(loanId));
-        borrowers.findByIdAndOrgId(borrowerId, org())
-                .filter(b -> b.getLoanId().equals(loanId))
-                .orElseThrow(() -> new NotFoundException("Borrower", borrowerId));
+        if (!borrowerService.isBorrowerInLoan(loanId, borrowerId))
+            throw new NotFoundException("Borrower", borrowerId);
+    }
+
+    // max+1, not count — count reuses ordinals after a delete and collides
+    private int nextOrdinal(UUID borrowerId) {
+        return income.findTopByBorrowerIdOrderByOrdinalDesc(borrowerId)
+                .map(x -> x.getOrdinal() + 1)
+                .orElse(0);
     }
 
     private void validate(UUID borrowerId, IncomeType type, BigDecimal amount, UUID employmentId) {
         if (type.isEmployment()) {
             if (employmentId == null)
                 throw new ValidationException("employmentId is required for employment income (" + type + ")");
-            employments.findByIdAndOrgId(employmentId, org())
+            employments.findByIdAndOrgId(employmentId, tenantContext.requireOrgId())
                     .filter(e -> e.getBorrowerId().equals(borrowerId))
                     .orElseThrow(() -> new ValidationException(
                             "employmentId must reference an employment of this borrower"));
@@ -77,20 +79,20 @@ public class IncomeService {
         item.setMonthlyAmount(req.monthlyAmount());
         item.setEmploymentId(req.employmentId());
         item.setDescription(req.description());
-        item.setOrdinal((int) income.countByBorrowerId(borrowerId));
+        item.setOrdinal(nextOrdinal(borrowerId));
         return income.save(item);
     }
 
     @Transactional(readOnly = true)
     public List<IncomeItem> list(UUID loanId, UUID borrowerId) {
         assertBorrowerInLoan(loanId, borrowerId);
-        return income.findByBorrowerIdOrderByOrdinalAsc(borrowerId);
+        return income.findByBorrowerIdOrderByOrdinalAscIdAsc(borrowerId);
     }
 
     @Transactional
     public IncomeItem update(UUID loanId, UUID borrowerId, UUID incomeId, UpdateIncomeRequest req) {
         assertBorrowerInLoan(loanId, borrowerId);
-        IncomeItem item = income.findByIdAndOrgId(incomeId, org())
+        IncomeItem item = income.findByIdAndOrgId(incomeId, tenantContext.requireOrgId())
                 .filter(x -> x.getBorrowerId().equals(borrowerId))
                 .orElseThrow(() -> new NotFoundException("Income", incomeId));
 
@@ -108,13 +110,13 @@ public class IncomeService {
         item.setEmploymentId(effectiveEmploymentId);   // authoritative: already merged + null-cleared for type switches
         if (req.description() != null) item.setDescription(req.description());
 
-        return item;
+        return income.save(item);
     }
 
     @Transactional
     public void delete(UUID loanId, UUID borrowerId, UUID incomeId) {
         assertBorrowerInLoan(loanId, borrowerId);
-        IncomeItem item = income.findByIdAndOrgId(incomeId, org())
+        IncomeItem item = income.findByIdAndOrgId(incomeId, tenantContext.requireOrgId())
                 .filter(x -> x.getBorrowerId().equals(borrowerId))
                 .orElseThrow(() -> new NotFoundException("Income", incomeId));
         income.delete(item);

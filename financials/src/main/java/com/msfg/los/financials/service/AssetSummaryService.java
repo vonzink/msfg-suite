@@ -7,7 +7,7 @@ import com.msfg.los.financials.web.dto.AssetSummaryRow;
 import com.msfg.los.loan.service.LoanAccessGuard;
 import com.msfg.los.loan.service.LoanService;
 import com.msfg.los.parties.domain.BorrowerParty;
-import com.msfg.los.parties.repo.BorrowerRepository;
+import com.msfg.los.parties.service.BorrowerService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,14 +21,14 @@ import java.util.stream.Collectors;
 public class AssetSummaryService {
 
     private final AssetRepository assets;
-    private final BorrowerRepository borrowers;
+    private final BorrowerService borrowerService;
     private final LoanService loanService;
     private final LoanAccessGuard accessGuard;
 
-    public AssetSummaryService(AssetRepository assets, BorrowerRepository borrowers,
+    public AssetSummaryService(AssetRepository assets, BorrowerService borrowerService,
                                LoanService loanService, LoanAccessGuard accessGuard) {
         this.assets = assets;
-        this.borrowers = borrowers;
+        this.borrowerService = borrowerService;
         this.loanService = loanService;
         this.accessGuard = accessGuard;
     }
@@ -37,7 +37,7 @@ public class AssetSummaryService {
     public AssetSummaryResponse summarize(UUID loanId) {
         accessGuard.assertCanAccess(loanService.get(loanId));
 
-        Map<UUID, String> borrowerNames = borrowers.findByLoanIdOrderByOrdinalAsc(loanId).stream()
+        Map<UUID, String> borrowerNames = borrowerService.listByLoan(loanId).stream()
                 .collect(Collectors.toMap(BorrowerParty::getId, AssetSummaryService::fullName));
 
         List<Asset> items = assets.findByLoanIdOrderByOrdinalAsc(loanId);

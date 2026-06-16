@@ -1,5 +1,6 @@
 package com.msfg.los.tenancy;
 
+import com.msfg.los.platform.tenancy.OrgTenantResolver;
 import com.msfg.los.platform.tenancy.TenantContextFilter;
 import com.msfg.los.platform.tenancy.TenantContextHolder;
 import jakarta.servlet.FilterChain;
@@ -52,13 +53,16 @@ class TenantContextFilterTest {
     }
 
     @Test
-    void malformedOrgIdDoesNotThrowAndNeverBindsTenant() {
+    void malformedOrgIdDoesNotThrowAndBindsNilTenantExplicitly() {
         authenticate(jwtWithOrg("not-a-uuid"));
-        AtomicReference<UUID> seenDuringChain = new AtomicReference<>(UUID.randomUUID());
+        AtomicReference<UUID> seenDuringChain = new AtomicReference<>();
         FilterChain chain = (req, res) -> seenDuringChain.set(TenantContextHolder.get());
         assertThatCode(() ->
                 filter.doFilter(new MockHttpServletRequest(), new MockHttpServletResponse(), chain))
                 .doesNotThrowAnyException();
-        assertThat(seenDuringChain.get()).isNull(); // never bound an invalid tenant
+        // Fail-closed EXPLICITLY: a present-but-malformed org_id binds the NIL sentinel
+        // (@TenantId queries match no rows), not silently leaving the tenant unset.
+        assertThat(seenDuringChain.get()).isEqualTo(OrgTenantResolver.NIL);
+        assertThat(TenantContextHolder.get()).isNull(); // still cleared in finally
     }
 }

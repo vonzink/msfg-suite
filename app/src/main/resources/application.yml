@@ -23,6 +23,13 @@ los:
     # No default — fail fast if LOS_NPI_KEY is unset (never silently encrypt NPI with a known key).
     # Base-64 of a 32-byte AES-256 key. local/test profiles supply a dev key; dev/prod require the env var.
     key: ${LOS_NPI_KEY}
+  security:
+    # When true (and NOT the local/test profile), RlsRuntimeRoleVerifier fails startup unless the live
+    # datasource connects as a non-owner, non-superuser role that Postgres RLS actually constrains
+    # (the seeded app_user — see V4__app_role.sql). Default false: nothing breaks until the non-owner
+    # role is provisioned out-of-band (Phase-6 ops step). dev/prod flip this to true once app_user has a
+    # LOGIN credential and the runtime datasource points at it. Override via LOS_ENFORCE_RLS_RUNTIME_ROLE.
+    enforce-rls-runtime-role: ${LOS_ENFORCE_RLS_RUNTIME_ROLE:false}
 management:
   endpoints:
     web:
