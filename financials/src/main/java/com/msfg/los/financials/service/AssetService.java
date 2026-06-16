@@ -47,6 +47,13 @@ public class AssetService {
                 .orElseThrow(() -> new NotFoundException("Borrower", borrowerId));
     }
 
+    // max+1, not count — count reuses ordinals after a delete and collides
+    private int nextOrdinal(UUID borrowerId) {
+        return assets.findTopByBorrowerIdOrderByOrdinalDesc(borrowerId)
+                .map(x -> x.getOrdinal() + 1)
+                .orElse(0);
+    }
+
     private void validateValue(BigDecimal cashOrMarketValue) {
         if (cashOrMarketValue != null && cashOrMarketValue.signum() < 0)
             throw new ValidationException("cashOrMarketValue must be >= 0");
@@ -64,14 +71,14 @@ public class AssetService {
         asset.setAccountNumber(req.accountNumber());
         asset.setCashOrMarketValue(req.cashOrMarketValue());
         asset.setVerified(req.verified());
-        asset.setOrdinal((int) assets.countByBorrowerId(borrowerId));
+        asset.setOrdinal(nextOrdinal(borrowerId));
         return assets.save(asset);
     }
 
     @Transactional(readOnly = true)
     public List<Asset> list(UUID loanId, UUID borrowerId) {
         assertBorrowerInLoan(loanId, borrowerId);
-        return assets.findByBorrowerIdOrderByOrdinalAsc(borrowerId);
+        return assets.findByBorrowerIdOrderByOrdinalAscIdAsc(borrowerId);
     }
 
     @Transactional

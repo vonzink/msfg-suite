@@ -52,13 +52,20 @@ public class EmploymentService {
                 .orElseThrow(() -> new NotFoundException("Borrower", borrowerId));
     }
 
+    // max+1, not count — count reuses ordinals after a delete and collides
+    private int nextOrdinal(UUID borrowerId) {
+        return employments.findTopByBorrowerIdOrderByOrdinalDesc(borrowerId)
+                .map(x -> x.getOrdinal() + 1)
+                .orElse(0);
+    }
+
     @Transactional
     public Employment add(UUID loanId, UUID borrowerId, AddEmploymentRequest req) {
         assertBorrowerInLoan(loanId, borrowerId);
         Employment e = new Employment();
         e.setLoanId(loanId);
         e.setBorrowerId(borrowerId);
-        e.setOrdinal((int) employments.countByBorrowerId(borrowerId));
+        e.setOrdinal(nextOrdinal(borrowerId));
         applyAndValidate(e,
                 req.employerName(), req.employerPhone(),
                 req.employerAddressLine1(), req.employerAddressLine2(),
@@ -73,7 +80,7 @@ public class EmploymentService {
     @Transactional(readOnly = true)
     public List<Employment> list(UUID loanId, UUID borrowerId) {
         assertBorrowerInLoan(loanId, borrowerId);
-        return employments.findByBorrowerIdOrderByOrdinalAsc(borrowerId);
+        return employments.findByBorrowerIdOrderByOrdinalAscIdAsc(borrowerId);
     }
 
     @Transactional

@@ -69,6 +69,13 @@ public class LiabilityService {
         }
     }
 
+    // max+1, not count — count reuses ordinals after a delete and collides
+    private int nextOrdinal(UUID borrowerId) {
+        return liabilities.findTopByBorrowerIdOrderByOrdinalDesc(borrowerId)
+                .map(x -> x.getOrdinal() + 1)
+                .orElse(0);
+    }
+
     private void validateValues(Liability l) {
         if (l.getMonthlyPayment() != null && l.getMonthlyPayment().signum() < 0) {
             throw new ValidationException("monthlyPayment must be >= 0");
@@ -97,7 +104,7 @@ public class LiabilityService {
         if (req.includeInDti() != null) l.setIncludeInDti(req.includeInDti());
         if (req.exclusionReason() != null) l.setExclusionReason(req.exclusionReason());
         if (req.monthsRemaining() != null) l.setMonthsRemaining(req.monthsRemaining());
-        l.setOrdinal((int) liabilities.countByBorrowerId(borrowerId));
+        l.setOrdinal(nextOrdinal(borrowerId));
 
         validateValues(l);
         applyAndValidateDtiPairing(l);
@@ -108,7 +115,7 @@ public class LiabilityService {
     @Transactional(readOnly = true)
     public List<Liability> list(UUID loanId, UUID borrowerId) {
         assertBorrowerInLoan(loanId, borrowerId);
-        return liabilities.findByBorrowerIdOrderByOrdinalAsc(borrowerId);
+        return liabilities.findByBorrowerIdOrderByOrdinalAscIdAsc(borrowerId);
     }
 
     @Transactional

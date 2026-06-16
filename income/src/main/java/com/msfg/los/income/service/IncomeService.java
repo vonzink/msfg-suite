@@ -51,6 +51,13 @@ public class IncomeService {
                 .orElseThrow(() -> new NotFoundException("Borrower", borrowerId));
     }
 
+    // max+1, not count — count reuses ordinals after a delete and collides
+    private int nextOrdinal(UUID borrowerId) {
+        return income.findTopByBorrowerIdOrderByOrdinalDesc(borrowerId)
+                .map(x -> x.getOrdinal() + 1)
+                .orElse(0);
+    }
+
     private void validate(UUID borrowerId, IncomeType type, BigDecimal amount, UUID employmentId) {
         if (type.isEmployment()) {
             if (employmentId == null)
@@ -77,14 +84,14 @@ public class IncomeService {
         item.setMonthlyAmount(req.monthlyAmount());
         item.setEmploymentId(req.employmentId());
         item.setDescription(req.description());
-        item.setOrdinal((int) income.countByBorrowerId(borrowerId));
+        item.setOrdinal(nextOrdinal(borrowerId));
         return income.save(item);
     }
 
     @Transactional(readOnly = true)
     public List<IncomeItem> list(UUID loanId, UUID borrowerId) {
         assertBorrowerInLoan(loanId, borrowerId);
-        return income.findByBorrowerIdOrderByOrdinalAsc(borrowerId);
+        return income.findByBorrowerIdOrderByOrdinalAscIdAsc(borrowerId);
     }
 
     @Transactional

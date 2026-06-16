@@ -8,8 +8,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface AssetRepository extends JpaRepository<Asset, UUID> {
-    List<Asset> findByBorrowerIdOrderByOrdinalAsc(UUID borrowerId);
+    List<Asset> findByBorrowerIdOrderByOrdinalAscIdAsc(UUID borrowerId);
     List<Asset> findByLoanIdOrderByOrdinalAsc(UUID loanId);
     Optional<Asset> findByIdAndOrgId(UUID id, UUID orgId);
-    long countByBorrowerId(UUID borrowerId);
+    Optional<Asset> findTopByBorrowerIdOrderByOrdinalDesc(UUID borrowerId);
 }
