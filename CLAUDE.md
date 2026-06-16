@@ -87,9 +87,13 @@ reasonable calls, he'll redirect. Verify by running the thing, not just assertin
   large/regulated tenant can later be promoted to a dedicated schema/DB without app changes.
   - *Spec-2 follow-ups:* engage RLS at runtime (non-owner datasource); `BorrowerService` self-scoping
     `findByIdAndOrgId`; reject JWTs with no `org_id` claim (avoid NIL-org writes); ADMIN-role cross-tenant test.
-- **Portability:** **all external services behind ports** with swappable adapters (storage, auth, AI,
-  email, payments, webhooks). Backend = a Docker image that runs on any cloud. **Cognito is the current
-  auth adapter**, swappable for Auth0/Keycloak via the auth port. Config-driven per env/tenant.
+- **Portability:** external services behind ports with swappable adapters — storage
+  (`platform.storage.BlobStoragePort`), AI, email, payments, webhooks. Backend = a Docker image that runs on
+  any cloud. ⚠️ **Auth is NOT yet a port:** it's Spring Security OAuth2 resource-server (OIDC-JWT),
+  config-swappable for any OIDC IdP (Auth0/Keycloak) via `issuer-uri`, but the Cognito-specific claim mapping
+  (`org_id`, `cognito:groups`) is currently inline in `app/config` (`SecurityConfig` +
+  `OrgScopedJwtAuthenticationConverter` + `CognitoRolesConverter`). A provider-neutral principal/tenant-claim
+  **port** is a planned deliverable of the cutover auth/role-reconciliation phase. Config-driven per env/tenant.
 - **Sequencing:** **Platform Foundation (multi-tenancy + port seams) lands before the 1003 sections.**
 - **AI:** provider-agnostic (`AiPort`) with OpenAI / Anthropic-Claude / DeepSeek adapters; provider+model+key per tenant. (Own spec.)
 - **Integrations:** partner REST API + signed inbound/outbound webhooks, per tenant. (Own milestone.)
