@@ -24,6 +24,12 @@ public interface FolderTemplateRepository extends JpaRepository<FolderTemplate, 
 
     Optional<FolderTemplate> findByOldLoanArchiveTrue();
 
+    /** Active delete-folder template, if any — the singleton check uses the ACTIVE set. */
+    Optional<FolderTemplate> findByActiveTrueAndDeleteFolderTrue();
+
+    /** Active old-loan-archive template, if any — the singleton check uses the ACTIVE set. */
+    Optional<FolderTemplate> findByActiveTrueAndOldLoanArchiveTrue();
+
     boolean existsByDisplayName(String displayName);
 
     Optional<FolderTemplate> findByIdAndOrgId(UUID id, UUID orgId);
