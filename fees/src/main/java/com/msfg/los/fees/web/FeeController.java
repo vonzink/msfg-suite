@@ -57,7 +57,7 @@ public class FeeController {
     public ApiResponse<FeeLineItemResponse> update(
             @PathVariable UUID loanId,
             @PathVariable UUID feeId,
-            @RequestBody UpdateFeeRequest req) {
+            @Valid @RequestBody UpdateFeeRequest req) {
         return ApiResponse.ok(FeeLineItemResponse.from(service.update(loanId, feeId, req)));
     }
 
