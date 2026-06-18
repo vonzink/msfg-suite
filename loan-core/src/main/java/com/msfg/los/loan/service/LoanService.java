@@ -10,7 +10,10 @@ import com.msfg.los.platform.security.CurrentUser;
 import com.msfg.los.platform.tenancy.OrgTenantResolver;
 import com.msfg.los.platform.tenancy.TenantContextHolder;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.msfg.los.loan.web.dto.LoanSearchHit;
@@ -32,16 +35,19 @@ public class LoanService {
     private final LoanLifecycle lifecycle;
     private final CurrentUser currentUser;
     private final PrimaryBorrowerNameResolver resolver;
+    private final OutstandingConditionResolver conditionResolver;
 
     public LoanService(LoanRepository loans, LoanStatusHistoryRepository histories,
                        SequenceLoanNumberGenerator numberGen, LoanLifecycle lifecycle,
-                       CurrentUser currentUser, PrimaryBorrowerNameResolver resolver) {
+                       CurrentUser currentUser, PrimaryBorrowerNameResolver resolver,
+                       OutstandingConditionResolver conditionResolver) {
         this.loans = loans;
         this.histories = histories;
         this.numberGen = numberGen;
         this.lifecycle = lifecycle;
         this.currentUser = currentUser;
         this.resolver = resolver;
+        this.conditionResolver = conditionResolver;
     }
 
     @Transactional
@@ -85,21 +91,52 @@ public class LoanService {
                     .orElseThrow(() -> new NotFoundException("Loan", loanNumber));
     }
 
+    /**
+     * Pipeline list with the full filter set (Phase 2 T4), built query-side via {@link LoanSpecifications}
+     * (never load-all-then-filter). The caller scope (org-wide vs owning-LO) is the always-on base
+     * predicate; each non-null facet adds a SQL predicate. {@code conditionsGt} is resolved through the
+     * conditions module's service (port {@link OutstandingConditionResolver}) into a loan-id set, then
+     * added as {@code loan.id in (:ids)} — loan-core never touches the loan_condition table.
+     *
+     * @param filter          bound query parameters (each facet optional)
+     * @param sort            resolved, injection-safe sort (default = newest-first; see {@link PipelineSort})
+     * @param orgWideView     caller has org-wide view
+     * @param callerLoanOfficerId caller's user id (owning LO), used when not org-wide
+     * @param page            zero-based page index
+     * @param size            page size
+     */
     @Transactional(readOnly = true)
-    public Page<LoanListItemResponse> pipeline(UUID loanOfficerId, LoanStatus status, boolean orgWideView, Pageable pageable) {
-        Page<Loan> page;
-        if (orgWideView) {
-            page = status == null
-                ? loans.findByDeletedAtIsNull(pageable)
-                : loans.findByStatusAndDeletedAtIsNull(status, pageable);
-        } else {
-            page = status == null
-                ? loans.findByLoanOfficerIdAndDeletedAtIsNull(loanOfficerId, pageable)
-                : loans.findByLoanOfficerIdAndStatusAndDeletedAtIsNull(loanOfficerId, status, pageable);
+    public Page<LoanListItemResponse> pipeline(PipelineFilter filter, Sort sort, boolean orgWideView,
+                                               UUID callerLoanOfficerId, int page, int size) {
+        Specification<Loan> spec = LoanSpecifications.notDeleted()
+                .and(LoanSpecifications.callerScope(orgWideView, callerLoanOfficerId));
+
+        if (filter.statuses() != null && !filter.statuses().isEmpty())
+            spec = spec.and(LoanSpecifications.statusIn(filter.statuses()));
+        if (filter.lo() != null)
+            spec = spec.and(LoanSpecifications.assignedTo(filter.lo()));
+        if (filter.loanTypes() != null && !filter.loanTypes().isEmpty())
+            spec = spec.and(LoanSpecifications.mortgageTypeIn(filter.loanTypes()));
+        if (filter.closingFrom() != null)
+            spec = spec.and(LoanSpecifications.consummationOnOrAfter(filter.closingFrom()));
+        if (filter.closingTo() != null)
+            spec = spec.and(LoanSpecifications.consummationOnOrBefore(filter.closingTo()));
+        if (filter.stageAgeGt() != null)
+            spec = spec.and(LoanSpecifications.stageOlderThanDays(filter.stageAgeGt()));
+        if (filter.amountMin() != null)
+            spec = spec.and(LoanSpecifications.amountAtLeast(filter.amountMin()));
+        if (filter.amountMax() != null)
+            spec = spec.and(LoanSpecifications.amountAtMost(filter.amountMax()));
+        if (filter.conditionsGt() != null) {
+            // Cross-module via the conditions SERVICE (ArchUnit boundary). Empty set → match nothing.
+            Set<UUID> ids = conditionResolver.loanIdsWithOutstandingOver(filter.conditionsGt());
+            spec = spec.and(LoanSpecifications.idIn(ids));
         }
-        var names = resolver.primaryBorrowerNamesByLoanIds(
-            page.map(Loan::getId).getContent());
-        return page.map(l -> LoanListItemResponse.from(l, names.get(l.getId())));
+
+        Pageable pageable = PageRequest.of(page, size, sort == null ? PipelineSort.DEFAULT : sort);
+        Page<Loan> result = loans.findAll(spec, pageable);
+        var names = resolver.primaryBorrowerNamesByLoanIds(result.map(Loan::getId).getContent());
+        return result.map(l -> LoanListItemResponse.from(l, names.get(l.getId())));
     }
 
     @Transactional

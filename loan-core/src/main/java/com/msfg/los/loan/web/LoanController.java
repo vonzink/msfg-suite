@@ -3,18 +3,21 @@ package com.msfg.los.loan.web;
 import com.msfg.los.loan.domain.Loan;
 import com.msfg.los.loan.domain.LoanLifecycle;
 import com.msfg.los.loan.domain.LoanStatus;
+import com.msfg.los.loan.domain.MortgageType;
 import com.msfg.los.loan.service.LoanAccessGuard;
 import com.msfg.los.loan.service.LoanService;
+import com.msfg.los.loan.service.PipelineSort;
 import com.msfg.los.loan.web.dto.*;
 import com.msfg.los.platform.security.CurrentUser;
 import com.msfg.los.platform.web.ApiResponse;
 import com.msfg.los.platform.web.PagedResponse;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -41,15 +44,45 @@ public class LoanController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(LoanSummaryResponse.from(loan)));
     }
 
+    /**
+     * Pipeline list with the full filter set (Phase 2 T4). All params optional except paging. Filtering
+     * + sorting happen query-side via a JPA {@code Specification} (see {@code LoanSpecifications}). The
+     * single-value {@code status} legacy behavior is preserved (a one-element list). Caller scope:
+     * org-wide-view roles see all org loans; an LO sees only loans they own. Default ordering is
+     * newest-first (createdAt DESC + id tiebreaker) when no {@code sort} is supplied.
+     *
+     * @param status      status in (...). Repeat the param for multiple values.
+     * @param lo          assigned loan-officer id.
+     * @param conditionsGt keep loans with strictly more than N outstanding conditions.
+     * @param closingFrom consummationDate on or after this date.
+     * @param closingTo   consummationDate on or before this date.
+     * @param stageAgeGt  days; keep loans whose status changed more than N days ago.
+     * @param loanType    mortgageType in (...). Repeat the param for multiple values.
+     * @param amountMin   primary loan amount (baseLoanAmount, falling back to noteAmount) >= this.
+     * @param amountMax   primary loan amount <= this.
+     * @param sort        {@code field,dir} — whitelist createdAt|statusChangedAt|amount, dir asc|desc.
+     */
     @GetMapping
     public ApiResponse<PagedResponse<LoanListItemResponse>> pipeline(
-            @RequestParam(required = false) LoanStatus status,
+            @RequestParam(required = false) List<LoanStatus> status,
+            @RequestParam(required = false) UUID lo,
+            @RequestParam(required = false) Integer conditionsGt,
+            @RequestParam(required = false) LocalDate closingFrom,
+            @RequestParam(required = false) LocalDate closingTo,
+            @RequestParam(required = false) Integer stageAgeGt,
+            @RequestParam(required = false) List<MortgageType> loanType,
+            @RequestParam(required = false) BigDecimal amountMin,
+            @RequestParam(required = false) BigDecimal amountMax,
+            @RequestParam(required = false) String sort,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         UUID me = currentUser.id().map(id -> {
             try { return UUID.fromString(id); } catch (IllegalArgumentException e) { return null; }
         }).orElse(null);
-        Page<LoanListItemResponse> result = service.pipeline(me, status, accessGuard.hasOrgWideView(), PageRequest.of(page, size));
+        PipelineFilter filter = new PipelineFilter(
+                status, lo, conditionsGt, closingFrom, closingTo, stageAgeGt, loanType, amountMin, amountMax);
+        Page<LoanListItemResponse> result = service.pipeline(
+                filter, PipelineSort.parse(sort), accessGuard.hasOrgWideView(), me, page, size);
         return ApiResponse.ok(PagedResponse.from(result));
     }
 
