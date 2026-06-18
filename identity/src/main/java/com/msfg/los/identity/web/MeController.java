@@ -6,11 +6,11 @@ import com.msfg.los.identity.web.dto.MeResponse;
 import com.msfg.los.loan.service.LoanAccessGuard;
 import com.msfg.los.loan.service.LoanService;
 import com.msfg.los.loan.web.dto.LoanListItemResponse;
+import com.msfg.los.loan.web.dto.PipelineFilter;
 import com.msfg.los.platform.security.CurrentUser;
 import com.msfg.los.platform.web.ApiResponse;
 import com.msfg.los.platform.web.PagedResponse;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -51,9 +51,11 @@ public class MeController {
             try { return UUID.fromString(id); } catch (IllegalArgumentException e) { return null; }
         }).orElse(null);
         // Org-wide roles (ADMIN/MANAGER/PROCESSOR/UNDERWRITER/CLOSER) see every loan; an LO sees
-        // only loans where loanOfficerId == their sub. Reuses LoanService's role-scoped pipeline.
+        // only loans where loanOfficerId == their sub. Reuses LoanService's role-scoped pipeline
+        // with no business facets (empty filter) and the default newest-first ordering (null sort).
+        PipelineFilter noFilter = new PipelineFilter(null, null, null, null, null, null, null, null, null);
         Page<LoanListItemResponse> result =
-                loans.pipeline(me, null, accessGuard.hasOrgWideView(), PageRequest.of(page, size));
+                loans.pipeline(noFilter, null, accessGuard.hasOrgWideView(), me, page, size);
         return ApiResponse.ok(PagedResponse.from(result));
     }
 }

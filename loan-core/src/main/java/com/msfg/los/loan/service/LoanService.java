@@ -10,10 +10,19 @@ import com.msfg.los.platform.security.CurrentUser;
 import com.msfg.los.platform.tenancy.OrgTenantResolver;
 import com.msfg.los.platform.tenancy.TenantContextHolder;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.msfg.los.loan.web.dto.LoanSearchHit;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -26,16 +35,19 @@ public class LoanService {
     private final LoanLifecycle lifecycle;
     private final CurrentUser currentUser;
     private final PrimaryBorrowerNameResolver resolver;
+    private final OutstandingConditionResolver conditionResolver;
 
     public LoanService(LoanRepository loans, LoanStatusHistoryRepository histories,
                        SequenceLoanNumberGenerator numberGen, LoanLifecycle lifecycle,
-                       CurrentUser currentUser, PrimaryBorrowerNameResolver resolver) {
+                       CurrentUser currentUser, PrimaryBorrowerNameResolver resolver,
+                       OutstandingConditionResolver conditionResolver) {
         this.loans = loans;
         this.histories = histories;
         this.numberGen = numberGen;
         this.lifecycle = lifecycle;
         this.currentUser = currentUser;
         this.resolver = resolver;
+        this.conditionResolver = conditionResolver;
     }
 
     @Transactional
@@ -67,23 +79,64 @@ public class LoanService {
         // load another org's loan and then hit 403 instead of 404 (leaking existence).
         UUID org = TenantContextHolder.get();
         UUID effectiveOrg = org != null ? org : OrgTenantResolver.NIL;
-        return loans.findByIdAndOrgId(id, effectiveOrg)
+        // deletedAtIsNull: a soft-deleted loan must read as 404, not as a live row (Phase 2 T3).
+        return loans.findByIdAndOrgIdAndDeletedAtIsNull(id, effectiveOrg)
                     .orElseThrow(() -> new NotFoundException("Loan", id));
     }
 
+    /** Lookup by human loan number (Phase 2 T3); org-scoped via @TenantId, not-deleted, 404 if missing. */
     @Transactional(readOnly = true)
-    public Page<LoanListItemResponse> pipeline(UUID loanOfficerId, LoanStatus status, boolean orgWideView, Pageable pageable) {
-        Page<Loan> page;
-        if (orgWideView) {
-            page = status == null ? loans.findAll(pageable) : loans.findByStatus(status, pageable);
-        } else {
-            page = status == null
-                ? loans.findByLoanOfficerId(loanOfficerId, pageable)
-                : loans.findByLoanOfficerIdAndStatus(loanOfficerId, status, pageable);
+    public Loan getByNumber(String loanNumber) {
+        return loans.findByLoanNumberAndDeletedAtIsNull(loanNumber)
+                    .orElseThrow(() -> new NotFoundException("Loan", loanNumber));
+    }
+
+    /**
+     * Pipeline list with the full filter set (Phase 2 T4), built query-side via {@link LoanSpecifications}
+     * (never load-all-then-filter). The caller scope (org-wide vs owning-LO) is the always-on base
+     * predicate; each non-null facet adds a SQL predicate. {@code conditionsGt} is resolved through the
+     * conditions module's service (port {@link OutstandingConditionResolver}) into a loan-id set, then
+     * added as {@code loan.id in (:ids)} — loan-core never touches the loan_condition table.
+     *
+     * @param filter          bound query parameters (each facet optional)
+     * @param sort            resolved, injection-safe sort (default = newest-first; see {@link PipelineSort})
+     * @param orgWideView     caller has org-wide view
+     * @param callerLoanOfficerId caller's user id (owning LO), used when not org-wide
+     * @param page            zero-based page index
+     * @param size            page size
+     */
+    @Transactional(readOnly = true)
+    public Page<LoanListItemResponse> pipeline(PipelineFilter filter, Sort sort, boolean orgWideView,
+                                               UUID callerLoanOfficerId, int page, int size) {
+        Specification<Loan> spec = LoanSpecifications.notDeleted()
+                .and(LoanSpecifications.callerScope(orgWideView, callerLoanOfficerId));
+
+        if (filter.statuses() != null && !filter.statuses().isEmpty())
+            spec = spec.and(LoanSpecifications.statusIn(filter.statuses()));
+        if (filter.lo() != null)
+            spec = spec.and(LoanSpecifications.assignedTo(filter.lo()));
+        if (filter.loanTypes() != null && !filter.loanTypes().isEmpty())
+            spec = spec.and(LoanSpecifications.mortgageTypeIn(filter.loanTypes()));
+        if (filter.closingFrom() != null)
+            spec = spec.and(LoanSpecifications.consummationOnOrAfter(filter.closingFrom()));
+        if (filter.closingTo() != null)
+            spec = spec.and(LoanSpecifications.consummationOnOrBefore(filter.closingTo()));
+        if (filter.stageAgeGt() != null)
+            spec = spec.and(LoanSpecifications.stageOlderThanDays(filter.stageAgeGt()));
+        if (filter.amountMin() != null)
+            spec = spec.and(LoanSpecifications.amountAtLeast(filter.amountMin()));
+        if (filter.amountMax() != null)
+            spec = spec.and(LoanSpecifications.amountAtMost(filter.amountMax()));
+        if (filter.conditionsGt() != null) {
+            // Cross-module via the conditions SERVICE (ArchUnit boundary). Empty set → match nothing.
+            Set<UUID> ids = conditionResolver.loanIdsWithOutstandingOver(filter.conditionsGt());
+            spec = spec.and(LoanSpecifications.idIn(ids));
         }
-        var names = resolver.primaryBorrowerNamesByLoanIds(
-            page.map(Loan::getId).getContent());
-        return page.map(l -> LoanListItemResponse.from(l, names.get(l.getId())));
+
+        Pageable pageable = PageRequest.of(page, size, sort == null ? PipelineSort.DEFAULT : sort);
+        Page<Loan> result = loans.findAll(spec, pageable);
+        var names = resolver.primaryBorrowerNamesByLoanIds(result.map(Loan::getId).getContent());
+        return result.map(l -> LoanListItemResponse.from(l, names.get(l.getId())));
     }
 
     @Transactional
@@ -165,15 +218,97 @@ public class LoanService {
         Loan loan = get(id);
         LoanStatus from = loan.getStatus();
         lifecycle.assertTransition(from, req.targetStatus(), authorities);
+        // Backdating (Phase 2 T3): use the supplied effective time, else now. When null, behavior is
+        // unchanged from before — the row's transitioned_at and the loan mirror both get now().
+        Instant effective = req.transitionedAt() != null ? req.transitionedAt() : Instant.now();
         loan.setStatus(req.targetStatus());
+        loan.setStatusChangedAt(effective);
         LoanStatusHistory h = new LoanStatusHistory();
         h.setLoanId(loan.getId());
         h.setFromStatus(from);
         h.setToStatus(req.targetStatus());
         h.setReason(req.reason());
+        h.setTransitionedAt(effective);
         // Actor is captured automatically on the history row via AuditableEntity.createdBy (JPA auditing).
         histories.save(h);
         return loan;
+    }
+
+    /**
+     * Soft-delete (Phase 2 T3): stamp deleted_at. Idempotent over a missing/already-deleted loan —
+     * both surface as 404 (get() already filters deleted, so a second call cannot find the row).
+     */
+    @Transactional
+    public Loan softDelete(UUID id) {
+        Loan loan = get(id);   // 404 if missing OR already soft-deleted
+        loan.setDeletedAt(Instant.now());
+        return loan;
+    }
+
+    /**
+     * Typeahead search (Phase 2 T3). Ranking: (1) exact loanNumber, (2) loanNumber prefix,
+     * (3) borrower-name substring. Not-deleted; scoped to the caller (org-wide → whole org,
+     * else own loans by loanOfficerId). Borrower-name resolution is batched (no N+1).
+     *
+     * @param q        raw query (min length 2 enforced by the controller)
+     * @param limit    capped (1..50) by the controller
+     * @param orgWide  caller has org-wide view
+     * @param meId     caller's user id (the owning LO), required when not org-wide
+     */
+    @Transactional(readOnly = true)
+    public List<LoanSearchHit> search(String q, int limit, boolean orgWide, UUID meId) {
+        String norm = q == null ? "" : q.trim();
+        if (norm.length() < 2) return List.of();
+        String lower = norm.toLowerCase();
+        String like = "%" + lower + "%";
+
+        // Preserve insertion order (rank order) and de-dup by loan id.
+        Map<UUID, Loan> ordered = new LinkedHashMap<>();
+
+        // Leg 1+2: loanNumber matches (exact + prefix + contains), then sorted exact→prefix→other.
+        List<Loan> byNumber = orgWide
+                ? loans.searchByLoanNumberLikeOrgWide(like)
+                : loans.searchByLoanNumberLikeForOfficer(meId, like);
+        byNumber.sort(Comparator
+                .comparingInt((Loan l) -> numberRank(l.getLoanNumber(), lower))
+                .thenComparing(Loan::getLoanNumber));
+        for (Loan l : byNumber) ordered.putIfAbsent(l.getId(), l);
+
+        // Leg 3: borrower-name substring (via the cross-module port). Intersect with caller scope.
+        Set<UUID> nameLoanIds = resolver.loanIdsByPrimaryBorrowerNameLike(norm);
+        if (!nameLoanIds.isEmpty()) {
+            List<Loan> byName = orgWide
+                    ? loans.findActiveByIds(nameLoanIds)
+                    : loans.findActiveByIdsForOfficer(meId, nameLoanIds);
+            byName.sort(Comparator.comparing(Loan::getLoanNumber));
+            for (Loan l : byName) ordered.putIfAbsent(l.getId(), l);
+        }
+
+        List<Loan> hits = new ArrayList<>(ordered.values());
+        if (hits.size() > limit) hits = hits.subList(0, limit);
+
+        // Batched borrower-name resolution (no N+1) for the final hit set.
+        Map<UUID, String> names = resolver.primaryBorrowerNamesByLoanIds(
+                hits.stream().map(Loan::getId).toList());
+        List<LoanSearchHit> out = new ArrayList<>(hits.size());
+        for (Loan l : hits) {
+            var sp = l.getSubjectProperty();
+            out.add(new LoanSearchHit(
+                    l.getId(), l.getLoanNumber(), names.get(l.getId()),
+                    sp != null ? sp.getCity() : null,
+                    sp != null ? sp.getState() : null,
+                    l.getStatus()));
+        }
+        return out;
+    }
+
+    /** 0 = exact loanNumber, 1 = prefix, 2 = other (contains). Lower-cased compare. */
+    private static int numberRank(String loanNumber, String lowerQuery) {
+        if (loanNumber == null) return 2;
+        String ln = loanNumber.toLowerCase();
+        if (ln.equals(lowerQuery)) return 0;
+        if (ln.startsWith(lowerQuery)) return 1;
+        return 2;
     }
 
     @Transactional(readOnly = true)
