@@ -31,4 +31,10 @@ public interface FolderRepository extends JpaRepository<Folder, UUID> {
     Optional<Folder> findByIdAndOrgId(UUID id, UUID orgId);
 
     boolean existsByLoanId(UUID loanId);
+
+    /** A live folder in the loan by case-insensitive name — used for default-folder routing. */
+    Optional<Folder> findFirstByLoanIdAndNameNormalizedAndDeletedAtIsNull(UUID loanId, String nameNormalized);
+
+    /** The loan's live Delete folder (is_delete_folder = true) — gates permanent deletion. */
+    Optional<Folder> findFirstByLoanIdAndDeleteFolderTrueAndDeletedAtIsNull(UUID loanId);
 }

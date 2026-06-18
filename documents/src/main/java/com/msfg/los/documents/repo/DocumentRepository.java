@@ -5,12 +5,18 @@ import com.msfg.los.documents.domain.DocumentType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface DocumentRepository extends JpaRepository<Document, UUID> {
+/**
+ * {@link JpaSpecificationExecutor} is mixed in so the list/faceted-search endpoints push every
+ * filter (status, type, folder, partyRole, uploadedBy, fileName-contains) INTO the SQL query
+ * (see {@code DocumentSpecifications}) — never load-all-then-filter in memory.
+ */
+public interface DocumentRepository extends JpaRepository<Document, UUID>, JpaSpecificationExecutor<Document> {
 
     Page<Document> findByLoanIdOrderByCreatedAtDesc(UUID loanId, Pageable pageable);
 

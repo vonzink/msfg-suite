@@ -71,13 +71,15 @@ class DocumentControllerIT extends AbstractIntegrationTest {
 
     @Test
     void listIncludesUploadedDocument() throws Exception {
+        // The Phase-1 list returns {count, documents} (confirmed docs only). The legacy multipart
+        // upload now lands UPLOADED, so it appears in the new list shape.
         String loanId = createLoan();
         uploadDoc(loanId, "INVOICE", "inv.pdf", "hello-pdf".getBytes(), "application/pdf");
 
         mvc.perform(get("/api/loans/{l}/documents", loanId).with(lo()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items.length()").value(org.hamcrest.Matchers.greaterThanOrEqualTo(1)))
-                .andExpect(jsonPath("$.data.items[?(@.documentType == 'INVOICE')].fileName",
+                .andExpect(jsonPath("$.data.count").value(org.hamcrest.Matchers.greaterThanOrEqualTo(1)))
+                .andExpect(jsonPath("$.data.documents[?(@.documentType == 'INVOICE')].fileName",
                         org.hamcrest.Matchers.hasItem("inv.pdf")));
     }
 
@@ -120,19 +122,19 @@ class DocumentControllerIT extends AbstractIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
-    // --- type filter returns only matching type ---
+    // --- list shows both uploaded docs (the legacy ?type= list filter was superseded by /search) ---
 
     @Test
-    void typeFilterReturnsOnlyMatchingType() throws Exception {
+    void listShowsAllConfirmedDocuments() throws Exception {
         String loanId = createLoan();
         uploadDoc(loanId, "INVOICE", "inv.pdf", "hello-pdf".getBytes(), "application/pdf");
         uploadDoc(loanId, "APPRAISAL", "appraisal.pdf", "appraisal-bytes".getBytes(), "application/pdf");
 
-        mvc.perform(get("/api/loans/{l}/documents", loanId).with(lo())
-                        .param("type", "INVOICE"))
+        mvc.perform(get("/api/loans/{l}/documents", loanId).with(lo()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items[*].documentType",
-                        org.hamcrest.Matchers.everyItem(org.hamcrest.Matchers.is("INVOICE"))));
+                .andExpect(jsonPath("$.data.count").value(org.hamcrest.Matchers.greaterThanOrEqualTo(2)))
+                .andExpect(jsonPath("$.data.documents[*].fileName",
+                        org.hamcrest.Matchers.hasItems("inv.pdf", "appraisal.pdf")));
     }
 
     // --- empty file → 400 ---
