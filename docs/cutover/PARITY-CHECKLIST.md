@@ -8,6 +8,19 @@ Definition-of-done for retiring `mortgage-app/backend` + `mortgage-app/frontend`
 > frontend. MSFG-suite already covers the full 1003 data model, qualification calc, pricing/lock,
 > AUS+credit, disclosures, fees, CoC, multi-tenancy, and the pipeline — those are **not** re-listed.
 
+## ✅ Merged so far (the per-item ❌/🟡 tags below predate these — sections now DONE)
+- **Phase 1 — Documents/S3** ✅ merged `9998e2e`: S3 `ObjectStoragePort` (S3 + DB-local adapters), 3-step
+  presigned upload/confirm/download, folders (tree + per-loan template seeding), doc-type + folder-template
+  catalogs (admin CRUD), 10-state review workflow + status-history, query-side faceted search. (V18/V19)
+- **Phase 2/3 — Auth & Identity** ✅ merged `c672f06`: MANAGER role + tenant-ADMIN catalog gating; `user_account`
+  (materialize-on-`/me`); `GET /me` + `/me/loans`; provider-neutral `PrincipalPort` + Cognito adapter (M1). (V20)
+- **Phase 2 — Loan/app + Dashboard** ✅ merged `ba98050`: conditions module + notes module; status backdating,
+  soft-delete, lookup-by-number, typeahead search; full query-side pipeline filter set; aggregated
+  `/dashboard` payload + edit-terms; clone "Copy to new" (deep applicant-tree copy). (V21–V23)
+- **Still open:** Phase 3 admin (beyond catalogs), Phase 4 AI folder-eval, Phase 5 MISMO + integrations,
+  Phase 6 deploy + `app.msfgco.com` DNS flip (gated). The deployed-Cognito `org_id` claim provisioning = Phase 6.
+  Known follow-ups: clone's `joinedToBorrowerId` not remapped; per-new-org catalog/template seeding.
+
 ## Auth / role model
 - ❌ `org_id` claim emitted by the deployed Cognito pool (new LOS pool) — Phase 0 design / Phase 6 provision.
 - ✅ Reject tenant-less tokens (fail-closed) — **done in Phase 0 (Task 1/2)**.
