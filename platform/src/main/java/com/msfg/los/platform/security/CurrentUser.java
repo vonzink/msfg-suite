@@ -1,52 +1,52 @@
 package com.msfg.los.platform.security;
 
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
+
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
+import java.util.UUID;
 
+/**
+ * App-facing facade for the authenticated principal. Callers depend on this convenient type; the
+ * actual principal source is the swappable {@link PrincipalPort} (default: {@link JwtPrincipalAdapter},
+ * the Cognito/OIDC-JWT adapter). Swapping IdP changes only the injected port, not this facade or its
+ * callers.
+ */
 @Component
 public class CurrentUser {
+
+    private final PrincipalPort principal;
+
+    public CurrentUser(PrincipalPort principal) {
+        this.principal = principal;
+    }
+
     public Optional<String> id() {
-        var auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth instanceof JwtAuthenticationToken jwt) {
-            Jwt token = jwt.getToken();
-            return Optional.ofNullable(token.getSubject());
-        }
-        return Optional.empty();
+        return principal.id();
     }
+
     public Optional<String> email() {
-        var auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth instanceof JwtAuthenticationToken jwt) {
-            Jwt token = jwt.getToken();
-            return Optional.ofNullable(token.getClaimAsString("email"));
-        }
-        return Optional.empty();
+        return principal.email();
     }
+
     /**
-     * The caller's display name from the JWT: the {@code name} claim, else
+     * The caller's display name from the principal: the {@code name} claim, else
      * {@code given_name} + {@code family_name} joined, else empty.
      */
     public Optional<String> name() {
-        var auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth instanceof JwtAuthenticationToken jwt) {
-            Jwt token = jwt.getToken();
-            String name = token.getClaimAsString("name");
-            if (name != null && !name.isBlank()) return Optional.of(name.trim());
-            String given = token.getClaimAsString("given_name");
-            String family = token.getClaimAsString("family_name");
-            String joined = ((given == null ? "" : given) + " " + (family == null ? "" : family)).trim();
-            if (!joined.isBlank()) return Optional.of(joined);
-        }
-        return Optional.empty();
+        return principal.name();
     }
+
+    /** The caller's tenant ({@code org_id}) as a UUID, or empty if absent / unparseable / unauthenticated. */
+    public Optional<UUID> orgId() {
+        return principal.orgId();
+    }
+
     public Set<String> roles() {
-        var auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null) return Set.of();
-        return auth.getAuthorities().stream().map(Object::toString).collect(Collectors.toSet());
+        return principal.roles();
     }
-    public boolean isAdmin() { return roles().contains(Role.ADMIN.authority()); }
+
+    public boolean isAdmin() {
+        return roles().contains(Role.ADMIN.authority());
+    }
 }

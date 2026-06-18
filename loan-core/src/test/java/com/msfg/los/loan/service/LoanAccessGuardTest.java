@@ -25,10 +25,13 @@ class LoanAccessGuardTest {
     }
 
     private CurrentUser userWith(String subject, String... authorities) {
-        return new CurrentUser() {
+        return new CurrentUser(new com.msfg.los.platform.security.PrincipalPort() {
             @Override public Optional<String> id() { return Optional.ofNullable(subject); }
+            @Override public Optional<String> email() { return Optional.empty(); }
+            @Override public Optional<String> name() { return Optional.empty(); }
+            @Override public Optional<UUID> orgId() { return Optional.empty(); }
             @Override public Set<String> roles() { return Set.of(authorities); }
-        };
+        });
     }
 
     private void assertAllowed(CurrentUser u) {
