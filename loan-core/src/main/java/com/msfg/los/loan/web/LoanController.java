@@ -15,6 +15,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -57,6 +58,35 @@ public class LoanController {
         Loan loan = service.get(id);
         accessGuard.assertCanAccess(loan);
         return ApiResponse.ok(LoanSummaryResponse.from(loan));
+    }
+
+    /** Lookup by human loan number (Phase 2 T3). Org-scoped + not-deleted; access-guarded. */
+    @GetMapping("/number/{loanNumber}")
+    public ApiResponse<LoanSummaryResponse> getByNumber(@PathVariable String loanNumber) {
+        Loan loan = service.getByNumber(loanNumber);
+        accessGuard.assertCanAccess(loan);
+        return ApiResponse.ok(LoanSummaryResponse.from(loan));
+    }
+
+    /** Typeahead search (Phase 2 T3): q (min len 2 else empty), limit default 10, cap 50. Caller-scoped. */
+    @GetMapping("/search")
+    public ApiResponse<List<LoanSearchHit>> search(
+            @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "10") int limit) {
+        int capped = Math.min(Math.max(limit, 1), 50);
+        UUID me = currentUser.id().map(id -> {
+            try { return UUID.fromString(id); } catch (IllegalArgumentException e) { return null; }
+        }).orElse(null);
+        return ApiResponse.ok(service.search(q, capped, accessGuard.hasOrgWideView(), me));
+    }
+
+    /** Soft-delete (Phase 2 T3). Gated to LO/MANAGER/ADMIN in SecurityConfig; LO must own the loan. */
+    @DeleteMapping("/{id}")
+    public ApiResponse<Void> delete(@PathVariable UUID id) {
+        Loan loan = service.get(id);     // 404 if missing or already soft-deleted
+        accessGuard.assertCanAccess(loan);   // owning LO (org-wide roles pass)
+        service.softDelete(id);
+        return ApiResponse.ok(null);
     }
 
     @PatchMapping("/{id}")

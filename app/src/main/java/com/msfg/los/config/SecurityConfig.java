@@ -44,6 +44,9 @@ public class SecurityConfig {
                     .hasAnyRole("ADMIN", "PLATFORM_ADMIN")
                 .requestMatchers("/api/admin/**").hasRole("PLATFORM_ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/loans").hasAnyRole("LO", "MANAGER", "ADMIN")
+                // Soft-delete a loan: LO-owner / MANAGER / ADMIN (Processor excluded, mortgage-app
+                // parity). The owning-LO check is enforced in the service via the access guard.
+                .requestMatchers(HttpMethod.DELETE, "/api/loans/*").hasAnyRole("LO", "MANAGER", "ADMIN")
                 .requestMatchers("/api/org/**").hasRole("ADMIN")
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().denyAll())

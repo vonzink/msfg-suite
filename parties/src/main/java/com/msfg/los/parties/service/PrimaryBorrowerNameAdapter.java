@@ -7,7 +7,9 @@ import org.springframework.stereotype.Component;
 
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Component
@@ -26,6 +28,17 @@ public class PrimaryBorrowerNameAdapter implements PrimaryBorrowerNameResolver {
         for (BorrowerParty b : borrowers.findByLoanIdInAndPrimaryTrue(loanIds)) {
             out.putIfAbsent(b.getLoanId(), name(b));   // first primary per loan wins
         }
+        return out;
+    }
+
+    @Override
+    public Set<UUID> loanIdsByPrimaryBorrowerNameLike(String query) {
+        Set<UUID> out = new LinkedHashSet<>();
+        if (query == null) return out;
+        String trimmed = query.trim();
+        if (trimmed.isEmpty()) return out;
+        String like = "%" + trimmed.toLowerCase() + "%";
+        out.addAll(borrowers.findLoanIdsByPrimaryBorrowerNameLike(like));
         return out;
     }
 

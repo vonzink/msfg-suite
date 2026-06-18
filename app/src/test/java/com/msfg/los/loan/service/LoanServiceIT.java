@@ -38,7 +38,7 @@ class LoanServiceIT extends AbstractIntegrationTest {
         Loan loan = service.create(new CreateLoanRequest(
             LoanPurposeType.PURCHASE, null, null, null, null, LO));
         service.transition(loan.getId(),
-            new TransitionRequest(LoanStatus.APPLICATION_IN_PROGRESS, "start"),
+            new TransitionRequest(LoanStatus.APPLICATION_IN_PROGRESS, "start", null),
             Set.of("ROLE_LO"));
         assertThat(service.history(loan.getId())).hasSize(1);
         assertThat(service.history(loan.getId()).get(0).getToStatus())
@@ -50,7 +50,7 @@ class LoanServiceIT extends AbstractIntegrationTest {
         Loan loan = service.create(new CreateLoanRequest(
             LoanPurposeType.PURCHASE, null, null, null, null, LO));
         assertThatThrownBy(() -> service.transition(loan.getId(),
-            new TransitionRequest(LoanStatus.FUNDED, "x"),
+            new TransitionRequest(LoanStatus.FUNDED, "x", null),
             Set.of("ROLE_ADMIN")))
             .isInstanceOf(com.msfg.los.platform.error.ConflictException.class);
     }

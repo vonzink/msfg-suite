@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -57,6 +58,16 @@ public class Loan extends TenantScopedEntity {
     // TRID consummation date (drives disclosure timing). Additive.
     @Column(name = "consummation_date")
     private LocalDate consummationDate;
+
+    // Mirror of the latest status-transition time (Phase 2 T3) — lets pipeline stage-age sorting
+    // avoid joining loan_status_history. Set on every transition (backdatable).
+    @Column(name = "status_changed_at")
+    private Instant statusChangedAt;
+
+    // Soft-delete tombstone (Phase 2 T3). Non-null = deleted; filtered from all reads. A regulated
+    // mortgage LOS must never hard-delete loan files.
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
 
     @Embedded
     private SubjectProperty subjectProperty = new SubjectProperty();
