@@ -77,10 +77,11 @@ class LockConfirmationIT extends AbstractIntegrationTest {
                 .andReturn();
         String docId = com.jayway.jsonpath.JsonPath.read(res.getResponse().getContentAsString(), "$.data.id");
 
-        mvc.perform(get("/api/loans/{id}/documents", loanId).with(lo())
-                        .param("type", "LOCK_CONFIRMATION"))
+        // Phase-1 list shape: {count, documents}; generated docs land UPLOADED so they list.
+        mvc.perform(get("/api/loans/{id}/documents", loanId).with(lo()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items[0].id").value(docId));
+                .andExpect(jsonPath("$.data.documents[?(@.id == '" + docId + "')]",
+                        org.hamcrest.Matchers.hasSize(1)));
 
         var download = mvc.perform(get("/api/loans/{id}/documents/{docId}/content", loanId, docId).with(lo()))
                 .andExpect(status().isOk()).andReturn();

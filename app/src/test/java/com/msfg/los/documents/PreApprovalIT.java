@@ -67,7 +67,9 @@ class PreApprovalIT extends AbstractIntegrationTest {
     // --- GET ?type=PRE_APPROVAL lists the generated doc ---
 
     @Test
-    void preApprovalAppearsInTypeFilteredList() throws Exception {
+    void preApprovalAppearsInList() throws Exception {
+        // Generated docs land UPLOADED, so they appear in the Phase-1 list ({count, documents}).
+        // The legacy ?type= list filter was superseded by GET /documents/search?documentTypeId=.
         var loanInfo = createLoanWithNumber();
         String loanId = loanInfo[0];
         addPrimaryBorrower(loanId, "Jane", "Smith");
@@ -75,11 +77,11 @@ class PreApprovalIT extends AbstractIntegrationTest {
         mvc.perform(post("/api/loans/{l}/documents/pre-approval", loanId).with(lo()))
                 .andExpect(status().isCreated());
 
-        mvc.perform(get("/api/loans/{l}/documents", loanId).with(lo())
-                        .param("type", "PRE_APPROVAL"))
+        mvc.perform(get("/api/loans/{l}/documents", loanId).with(lo()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items.length()").value(org.hamcrest.Matchers.greaterThanOrEqualTo(1)))
-                .andExpect(jsonPath("$.data.items[0].documentType").value("PRE_APPROVAL"));
+                .andExpect(jsonPath("$.data.count").value(org.hamcrest.Matchers.greaterThanOrEqualTo(1)))
+                .andExpect(jsonPath("$.data.documents[?(@.documentType == 'PRE_APPROVAL')]",
+                        org.hamcrest.Matchers.hasSize(1)));
     }
 
     // --- download content contains loan number ---

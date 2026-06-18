@@ -15,6 +15,17 @@ spring:
     enabled: true
     locations: classpath:db/migration
 los:
+  storage:
+    # Object-storage driver selection (ports-and-adapters). Default "db": LocalObjectStorageAdapter
+    # keeps bytes in the document_content table and presigns to the internal, authenticated
+    # /api/_local-blob/{token} endpoints (LocalBlobController). PROD sets driver=s3 →
+    # S3ObjectStorageAdapter + real presigned PUT/GET URLs (LocalBlobController is then NOT registered).
+    # Exactly one ObjectStoragePort + one BlobStoragePort bean is active per mode (@ConditionalOnProperty).
+    driver: ${LOS_STORAGE_DRIVER:db}
+    # s3:
+    #   bucket: ${LOS_STORAGE_S3_BUCKET}        # required when driver=s3
+    #   region: ${LOS_STORAGE_S3_REGION:us-east-1}
+    #   presigned-ttl-seconds: 900              # advisory default the documents service uses for TTLs
   cors:
     # Exact origin allowlist — NEVER use wildcards. Empty = deny all cross-origin (safe default).
     # Override per profile or inject via LOS_CORS_ALLOWED_ORIGINS env var (comma-separated).

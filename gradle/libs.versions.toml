@@ -3,9 +3,12 @@ springBoot = "3.3.5"
 springDepMgmt = "1.1.6"
 springdoc = "2.6.0"
 testcontainers = "1.20.3"
+awsSdk = "2.46.11"
 
 [libraries]
 springdoc-openapi = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
+aws-sdk-bom = { module = "software.amazon.awssdk:bom", version.ref = "awsSdk" }
+aws-sdk-s3 = { module = "software.amazon.awssdk:s3" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "springBoot" }
