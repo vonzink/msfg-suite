@@ -5,10 +5,13 @@ import com.msfg.los.documents.domain.DocumentStatus;
 import com.msfg.los.documents.domain.DocumentType;
 import com.msfg.los.documents.domain.DocumentTypeCatalog;
 import com.msfg.los.documents.domain.Folder;
+import com.msfg.los.documents.domain.DocumentStatusHistory;
 import com.msfg.los.documents.repo.DocumentRepository;
 import com.msfg.los.documents.repo.DocumentSpecifications;
+import com.msfg.los.documents.repo.DocumentStatusHistoryRepository;
 import com.msfg.los.documents.repo.DocumentTypeCatalogRepository;
 import com.msfg.los.documents.repo.FolderRepository;
+import com.msfg.los.documents.web.dto.BulkReviewResult;
 import com.msfg.los.documents.web.dto.MoveDocumentsRequest;
 import com.msfg.los.documents.web.dto.PatchDocumentRequest;
 import com.msfg.los.documents.web.dto.UploadUrlRequest;
@@ -18,6 +21,7 @@ import com.msfg.los.loan.service.LoanService;
 import com.msfg.los.loan.service.PrimaryBorrowerNameResolver;
 import com.msfg.los.platform.error.NotFoundException;
 import com.msfg.los.platform.error.ValidationException;
+import com.msfg.los.platform.security.CurrentUser;
 import com.msfg.los.platform.storage.BlobStoragePort;
 import com.msfg.los.platform.storage.ObjectStoragePort;
 import com.msfg.los.platform.tenancy.TenantContext;
@@ -34,6 +38,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -62,35 +67,41 @@ public class DocumentService {
     private final DocumentRepository documents;
     private final DocumentTypeCatalogRepository documentTypes;
     private final FolderRepository folders;
+    private final DocumentStatusHistoryRepository statusHistory;
     private final FolderService folderService;
     private final BlobStoragePort blobPort;
     private final ObjectStoragePort objectStorage;
     private final LoanService loanService;
     private final LoanAccessGuard accessGuard;
     private final TenantContext tenantContext;
+    private final CurrentUser currentUser;
     private final PrimaryBorrowerNameResolver borrowerNameResolver;
     private final PreApprovalLetterGenerator generator;
 
     public DocumentService(DocumentRepository documents,
                            DocumentTypeCatalogRepository documentTypes,
                            FolderRepository folders,
+                           DocumentStatusHistoryRepository statusHistory,
                            FolderService folderService,
                            BlobStoragePort blobPort,
                            ObjectStoragePort objectStorage,
                            LoanService loanService,
                            LoanAccessGuard accessGuard,
                            TenantContext tenantContext,
+                           CurrentUser currentUser,
                            PrimaryBorrowerNameResolver borrowerNameResolver,
                            PreApprovalLetterGenerator generator) {
         this.documents = documents;
         this.documentTypes = documentTypes;
         this.folders = folders;
+        this.statusHistory = statusHistory;
         this.folderService = folderService;
         this.blobPort = blobPort;
         this.objectStorage = objectStorage;
         this.loanService = loanService;
         this.accessGuard = accessGuard;
         this.tenantContext = tenantContext;
+        this.currentUser = currentUser;
         this.borrowerNameResolver = borrowerNameResolver;
         this.generator = generator;
     }
@@ -312,6 +323,145 @@ public class DocumentService {
         doc.setDeletedAt(Instant.now());
         doc.setDocumentStatus(DocumentStatus.DELETED_SOFT);
         documents.save(doc);
+    }
+
+    // ── review state machine + status history (Task 6) ───────────────────────────────────────
+
+    /**
+     * Generic status transition ({@code PUT /status}): validate the edge against the pure
+     * {@link DocumentStatusTransitions} table (illegal → 409), set the new status, and append a
+     * {@link DocumentStatusHistory} row. NO review-field side effects (use the review actions for that).
+     *
+     * @param targetName the target {@link DocumentStatus} name (unknown → 400)
+     */
+    @Transactional
+    public Document transition(UUID loanId, UUID docId, String targetName, String note) {
+        accessGuard.assertCanAccess(loanService.get(loanId));
+        Document doc = loadLive(loanId, docId);
+
+        DocumentStatus target = parseStatus(targetName);
+        DocumentStatusTransitions.assertAllowed(doc.getDocumentStatus(), target);
+
+        doc.setDocumentStatus(target);
+        appendHistory(doc, target, note);
+        return documents.save(doc);
+    }
+
+    /** Accept ({@code → ACCEPTED}); notes optional. */
+    @Transactional
+    public Document accept(UUID loanId, UUID docId, String notes) {
+        accessGuard.assertCanAccess(loanService.get(loanId));
+        Document doc = loadLive(loanId, docId);
+        return reviewDocument(doc, DocumentStatus.ACCEPTED, notes);
+    }
+
+    /** Reject ({@code → REJECTED}); notes required (non-blank → 400). */
+    @Transactional
+    public Document reject(UUID loanId, UUID docId, String notes) {
+        accessGuard.assertCanAccess(loanService.get(loanId));
+        Document doc = loadLive(loanId, docId);
+        requireNotes(notes);
+        return reviewDocument(doc, DocumentStatus.REJECTED, notes);
+    }
+
+    /** Request revision ({@code → NEEDS_BORROWER_ACTION}); notes required (non-blank → 400). */
+    @Transactional
+    public Document requestRevision(UUID loanId, UUID docId, String notes) {
+        accessGuard.assertCanAccess(loanService.get(loanId));
+        Document doc = loadLive(loanId, docId);
+        requireNotes(notes);
+        return reviewDocument(doc, DocumentStatus.NEEDS_BORROWER_ACTION, notes);
+    }
+
+    /**
+     * Bulk-review: apply one {@code decision} to many docs in a single call. {@code decision} must be
+     * {@code ACCEPTED} / {@code REJECTED} / {@code NEEDS_BORROWER_ACTION} (else 400); notes required for
+     * the two non-accept decisions. Each doc is processed in its OWN handling so a per-doc failure
+     * (missing/foreign/not-in-a-reviewable-state) is COLLECTED, never aborting the batch.
+     */
+    @Transactional
+    public BulkReviewResult bulkReview(UUID loanId, String decisionName, List<UUID> docIds, String notes) {
+        accessGuard.assertCanAccess(loanService.get(loanId));
+
+        DocumentStatus decision = parseStatus(decisionName);
+        if (decision != DocumentStatus.ACCEPTED
+                && decision != DocumentStatus.REJECTED
+                && decision != DocumentStatus.NEEDS_BORROWER_ACTION) {
+            throw new ValidationException(
+                    "decision must be one of ACCEPTED, REJECTED, NEEDS_BORROWER_ACTION");
+        }
+        if (decision != DocumentStatus.ACCEPTED) {
+            requireNotes(notes);
+        }
+
+        UUID orgId = tenantContext.requireOrgId();
+        int succeeded = 0;
+        List<BulkReviewResult.Failure> failures = new ArrayList<>();
+        for (UUID id : docIds) {
+            try {
+                Document doc = documents.findByIdAndOrgId(id, orgId)
+                        .filter(d -> d.getDeletedAt() == null)
+                        .filter(d -> d.getLoanId().equals(loanId))
+                        .orElseThrow(() -> new NotFoundException("Document", id));
+                reviewDocument(doc, decision, notes);
+                succeeded++;
+            } catch (RuntimeException ex) {
+                failures.add(new BulkReviewResult.Failure(id, ex.getMessage()));
+            }
+        }
+        return new BulkReviewResult(docIds.size(), succeeded, failures.size(), decision, failures);
+    }
+
+    /** Ordered (oldest-first) status history for a document. */
+    @Transactional(readOnly = true)
+    public List<DocumentStatusHistory> statusHistory(UUID loanId, UUID docId) {
+        accessGuard.assertCanAccess(loanService.get(loanId));
+        Document doc = loadLive(loanId, docId);
+        return statusHistory.findByDocumentIdOrderByTransitionedAtAsc(doc.getId());
+    }
+
+    /**
+     * Shared review apply: validate the edge ({@code current → target}), set status + reviewer
+     * identity / notes / timestamp, append history. In practice the reviewable entry state is
+     * {@code READY_FOR_REVIEW}; the transition table enforces it (a doc in e.g. PENDING_UPLOAD → 409).
+     */
+    private Document reviewDocument(Document doc, DocumentStatus target, String notes) {
+        DocumentStatusTransitions.assertAllowed(doc.getDocumentStatus(), target);
+        doc.setDocumentStatus(target);
+        doc.setReviewedBy(currentUser.id().orElse(null));
+        doc.setReviewerNotes(blankToNull(notes));
+        doc.setReviewedAt(Instant.now());
+        appendHistory(doc, target, notes);
+        return documents.save(doc);
+    }
+
+    /** Append an append-only status-history row stamped with the current principal + now. */
+    private void appendHistory(Document doc, DocumentStatus status, String note) {
+        DocumentStatusHistory row = new DocumentStatusHistory();
+        row.setDocumentId(doc.getId());
+        row.setStatus(status);
+        row.setTransitionedAt(Instant.now());
+        row.setTransitionedBy(currentUser.id().orElse(null));
+        row.setNote(blankToNull(note));
+        statusHistory.save(row);
+    }
+
+    private static void requireNotes(String notes) {
+        if (notes == null || notes.isBlank()) {
+            throw new ValidationException("notes are required for this review action");
+        }
+    }
+
+    /** Parse a {@link DocumentStatus} name from a request body string; unknown / blank → 400. */
+    private static DocumentStatus parseStatus(String name) {
+        if (name == null || name.isBlank()) {
+            throw new ValidationException("status is required");
+        }
+        try {
+            return DocumentStatus.valueOf(name.trim().toUpperCase());
+        } catch (IllegalArgumentException unknown) {
+            throw new ValidationException("Unknown document status: " + name);
+        }
     }
 
     // ── legacy paths (kept for generated docs / pre-approval / existing multipart contract) ──

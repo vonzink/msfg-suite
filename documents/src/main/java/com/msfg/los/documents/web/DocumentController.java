@@ -3,7 +3,10 @@ package com.msfg.los.documents.web;
 import com.msfg.los.documents.domain.Document;
 import com.msfg.los.documents.domain.DocumentStatus;
 import com.msfg.los.documents.domain.DocumentType;
+import com.msfg.los.documents.domain.DocumentStatusHistory;
 import com.msfg.los.documents.service.DocumentService;
+import com.msfg.los.documents.web.dto.BulkReviewRequest;
+import com.msfg.los.documents.web.dto.BulkReviewResult;
 import com.msfg.los.documents.web.dto.DocumentListResponse;
 import com.msfg.los.documents.web.dto.DocumentResponse;
 import com.msfg.los.documents.web.dto.DocumentSearchResponse;
@@ -11,6 +14,9 @@ import com.msfg.los.documents.web.dto.DownloadUrlResponse;
 import com.msfg.los.documents.web.dto.MoveDocumentsRequest;
 import com.msfg.los.documents.web.dto.MoveDocumentsResult;
 import com.msfg.los.documents.web.dto.PatchDocumentRequest;
+import com.msfg.los.documents.web.dto.ReviewRequest;
+import com.msfg.los.documents.web.dto.StatusHistoryResponse;
+import com.msfg.los.documents.web.dto.StatusTransitionRequest;
 import com.msfg.los.documents.web.dto.UploadUrlRequest;
 import com.msfg.los.documents.web.dto.UploadUrlResponse;
 import com.msfg.los.platform.web.ApiResponse;
@@ -142,6 +148,63 @@ public class DocumentController {
             @PathVariable UUID docId) {
         service.permanentDelete(loanId, docId);
         return ApiResponse.ok(Map.of("ok", true, "docId", docId));
+    }
+
+    // ── review state machine + status history (Task 6) ───────────────────────────────────────
+
+    @PutMapping("/{docId}/status")
+    public ApiResponse<DocumentResponse> transition(
+            @PathVariable UUID loanId,
+            @PathVariable UUID docId,
+            @Valid @RequestBody StatusTransitionRequest req) {
+        Document doc = service.transition(loanId, docId, req.status(), req.note());
+        return ApiResponse.ok(DocumentResponse.from(doc));
+    }
+
+    @PostMapping("/{docId}/accept")
+    public ApiResponse<DocumentResponse> accept(
+            @PathVariable UUID loanId,
+            @PathVariable UUID docId,
+            @RequestBody(required = false) ReviewRequest req) {
+        String notes = req != null ? req.notes() : null;
+        Document doc = service.accept(loanId, docId, notes);
+        return ApiResponse.ok(DocumentResponse.from(doc));
+    }
+
+    @PostMapping("/{docId}/reject")
+    public ApiResponse<DocumentResponse> reject(
+            @PathVariable UUID loanId,
+            @PathVariable UUID docId,
+            @RequestBody(required = false) ReviewRequest req) {
+        String notes = req != null ? req.notes() : null;
+        Document doc = service.reject(loanId, docId, notes);
+        return ApiResponse.ok(DocumentResponse.from(doc));
+    }
+
+    @PostMapping("/{docId}/request-revision")
+    public ApiResponse<DocumentResponse> requestRevision(
+            @PathVariable UUID loanId,
+            @PathVariable UUID docId,
+            @RequestBody(required = false) ReviewRequest req) {
+        String notes = req != null ? req.notes() : null;
+        Document doc = service.requestRevision(loanId, docId, notes);
+        return ApiResponse.ok(DocumentResponse.from(doc));
+    }
+
+    @PostMapping("/bulk-review")
+    public ApiResponse<BulkReviewResult> bulkReview(
+            @PathVariable UUID loanId,
+            @Valid @RequestBody BulkReviewRequest req) {
+        BulkReviewResult result = service.bulkReview(loanId, req.decision(), req.docIds(), req.notes());
+        return ApiResponse.ok(result);
+    }
+
+    @GetMapping("/{docId}/status-history")
+    public ApiResponse<StatusHistoryResponse> statusHistory(
+            @PathVariable UUID loanId,
+            @PathVariable UUID docId) {
+        List<DocumentStatusHistory> rows = service.statusHistory(loanId, docId);
+        return ApiResponse.ok(StatusHistoryResponse.of(docId, rows));
     }
 
     // ── legacy paths (retained) ────────────────────────────────────────────────────────────
