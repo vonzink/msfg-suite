@@ -38,8 +38,12 @@ public class SecurityConfig {
             .authorizeHttpRequests(reg -> reg
                 .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
+                // Per-tenant catalogs: a tenant ADMIN manages them (PLATFORM_ADMIN also allowed).
+                // MUST precede the broad /api/admin/** rule — more specific matcher first.
+                .requestMatchers("/api/admin/document-types/**", "/api/admin/folder-templates/**")
+                    .hasAnyRole("ADMIN", "PLATFORM_ADMIN")
                 .requestMatchers("/api/admin/**").hasRole("PLATFORM_ADMIN")
-                .requestMatchers(HttpMethod.POST, "/api/loans").hasAnyRole("LO", "ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/loans").hasAnyRole("LO", "MANAGER", "ADMIN")
                 .requestMatchers("/api/org/**").hasRole("ADMIN")
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().denyAll())

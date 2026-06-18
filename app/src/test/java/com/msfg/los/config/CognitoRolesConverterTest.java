@@ -37,6 +37,16 @@ class CognitoRolesConverterTest {
     }
 
     @Test
+    void mintsManagerAuthorityButStillDropsUnknownGroup() {
+        // MANAGER is a Role enum name → auto-allowlisted (no converter change). A bogus group is dropped.
+        Jwt jwt = Jwt.withTokenValue("t").header("alg", "none").subject("u")
+            .claim("cognito:groups", List.of("MANAGER", "SUPERMANAGER"))
+            .issuedAt(Instant.now()).expiresAt(Instant.now().plusSeconds(60)).build();
+        assertThat(converter.convert(jwt)).extracting(GrantedAuthority::getAuthority)
+            .containsExactly(Role.MANAGER.authority());
+    }
+
+    @Test
     void allRoleEnumNamesStillConvert() {
         Jwt jwt = Jwt.withTokenValue("t").header("alg", "none").subject("u")
             .claim("cognito:groups", Arrays.stream(Role.values()).map(Enum::name).toList())

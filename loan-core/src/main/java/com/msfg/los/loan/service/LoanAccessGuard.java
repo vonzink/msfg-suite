@@ -11,10 +11,12 @@ import java.util.UUID;
 @Component
 public class LoanAccessGuard {
 
-    // Back-office roles work the whole org's pipeline (spec 2026-06-11). PLATFORM_ADMIN
-    // is deliberately absent: platform operators administer orgs, not loan files.
+    // Back-office roles work the whole org's pipeline (spec 2026-06-11). MANAGER is a staff
+    // supervisor with full org-wide loan read/write (cutover Phase 2/3 T1, mortgage-app parity).
+    // PLATFORM_ADMIN is deliberately absent: platform operators administer orgs, not loan files.
     private static final Set<String> ORG_WIDE_AUTHORITIES = Set.of(
-            Role.PROCESSOR.authority(), Role.UNDERWRITER.authority(), Role.CLOSER.authority());
+            Role.PROCESSOR.authority(), Role.UNDERWRITER.authority(),
+            Role.CLOSER.authority(), Role.MANAGER.authority());
 
     private final CurrentUser currentUser;
 

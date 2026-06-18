@@ -27,9 +27,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * seed counts (which {@code DocumentsPhase1RlsIT} asserts). Tenant isolation is exercised against a
  * second fresh org.
  *
- * <p>Admin routes live under {@code /api/admin/**}; in the {@code test} profile the real
- * SecurityConfig URL rule gates that prefix to {@code ROLE_PLATFORM_ADMIN}, so admin tests carry
- * that authority and the non-admin (ROLE_LO) caller is rejected with 403.
+ * <p>Per-tenant catalog admin routes live under {@code /api/admin/document-types/**}; in the
+ * {@code test} profile the real SecurityConfig URL rule gates that prefix to
+ * {@code hasAnyRole("ADMIN","PLATFORM_ADMIN")} (cutover Phase 2/3 T1 — a tenant ADMIN now manages
+ * its own catalogs). Admin CRUD tests authenticate as a tenant {@code ROLE_ADMIN}; a
+ * {@code ROLE_PLATFORM_ADMIN}-only caller is also accepted, and a non-admin (ROLE_LO) is 403.
  */
 class DocumentTypeCatalogIT extends AbstractIntegrationTest {
 
@@ -77,16 +79,21 @@ class DocumentTypeCatalogIT extends AbstractIntegrationTest {
                 .authorities(new SimpleGrantedAuthority("ROLE_LO"));
     }
 
+    /** Tenant ADMIN — manages its own org's catalog (the new Phase 2/3 T1 gating). */
     private RequestPostProcessor admin() {
         return jwt().jwt(j -> j.subject(USER).claim("org_id", CAT_ORG))
-                .authorities(new SimpleGrantedAuthority("ROLE_PLATFORM_ADMIN"),
-                        new SimpleGrantedAuthority("ROLE_ADMIN"));
+                .authorities(new SimpleGrantedAuthority("ROLE_ADMIN"));
+    }
+
+    /** Platform admin WITHOUT the tenant ADMIN role — still accepted via hasAnyRole. */
+    private RequestPostProcessor platformAdminOnly() {
+        return jwt().jwt(j -> j.subject(USER).claim("org_id", CAT_ORG))
+                .authorities(new SimpleGrantedAuthority("ROLE_PLATFORM_ADMIN"));
     }
 
     private RequestPostProcessor adminOrg(String orgId) {
         return jwt().jwt(j -> j.subject(UUID.randomUUID().toString()).claim("org_id", orgId))
-                .authorities(new SimpleGrantedAuthority("ROLE_PLATFORM_ADMIN"),
-                        new SimpleGrantedAuthority("ROLE_ADMIN"));
+                .authorities(new SimpleGrantedAuthority("ROLE_ADMIN"));
     }
 
     // ── staff reads ────────────────────────────────────────────────────────────────────
@@ -132,6 +139,13 @@ class DocumentTypeCatalogIT extends AbstractIntegrationTest {
     @Test
     void adminListReturnsAllTypes() throws Exception {
         mvc.perform(get("/api/admin/document-types").with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data", hasSize(greaterThanOrEqualTo(16))));
+    }
+
+    @Test
+    void platformAdminWithoutTenantAdminRoleIsAlsoAllowed() throws Exception {
+        mvc.perform(get("/api/admin/document-types").with(platformAdminOnly()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data", hasSize(greaterThanOrEqualTo(16))));
     }
