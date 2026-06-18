@@ -26,6 +26,23 @@ public class CurrentUser {
         }
         return Optional.empty();
     }
+    /**
+     * The caller's display name from the JWT: the {@code name} claim, else
+     * {@code given_name} + {@code family_name} joined, else empty.
+     */
+    public Optional<String> name() {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth instanceof JwtAuthenticationToken jwt) {
+            Jwt token = jwt.getToken();
+            String name = token.getClaimAsString("name");
+            if (name != null && !name.isBlank()) return Optional.of(name.trim());
+            String given = token.getClaimAsString("given_name");
+            String family = token.getClaimAsString("family_name");
+            String joined = ((given == null ? "" : given) + " " + (family == null ? "" : family)).trim();
+            if (!joined.isBlank()) return Optional.of(joined);
+        }
+        return Optional.empty();
+    }
     public Set<String> roles() {
         var auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null) return Set.of();
