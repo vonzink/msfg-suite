@@ -28,8 +28,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * template + one active Old-Loan-Archive template, so the singleton + undeletable-Delete rules are
  * exercised against real seeded state. Tenant isolation uses a second fresh org.
  *
- * <p>Admin routes ({@code /api/admin/**}) are gated to {@code ROLE_PLATFORM_ADMIN} by the
- * test-profile SecurityConfig URL rule; non-admin (ROLE_LO) → 403.
+ * <p>Per-tenant catalog admin routes ({@code /api/admin/folder-templates/**}) are gated to
+ * {@code hasAnyRole("ADMIN","PLATFORM_ADMIN")} by the test-profile SecurityConfig URL rule
+ * (cutover Phase 2/3 T1 — a tenant ADMIN manages its own catalogs). CRUD tests authenticate as
+ * a tenant {@code ROLE_ADMIN}; a {@code ROLE_PLATFORM_ADMIN}-only caller is also accepted; a
+ * non-admin (ROLE_LO) → 403.
  */
 class FolderTemplateAdminIT extends AbstractIntegrationTest {
 
@@ -62,16 +65,21 @@ class FolderTemplateAdminIT extends AbstractIntegrationTest {
                 .authorities(new SimpleGrantedAuthority("ROLE_LO"));
     }
 
+    /** Tenant ADMIN — manages its own org's catalog (the new Phase 2/3 T1 gating). */
     private RequestPostProcessor admin() {
         return jwt().jwt(j -> j.subject(USER).claim("org_id", FT_ORG))
-                .authorities(new SimpleGrantedAuthority("ROLE_PLATFORM_ADMIN"),
-                        new SimpleGrantedAuthority("ROLE_ADMIN"));
+                .authorities(new SimpleGrantedAuthority("ROLE_ADMIN"));
+    }
+
+    /** Platform admin WITHOUT the tenant ADMIN role — still accepted via hasAnyRole. */
+    private RequestPostProcessor platformAdminOnly() {
+        return jwt().jwt(j -> j.subject(USER).claim("org_id", FT_ORG))
+                .authorities(new SimpleGrantedAuthority("ROLE_PLATFORM_ADMIN"));
     }
 
     private RequestPostProcessor adminOrg(String orgId) {
         return jwt().jwt(j -> j.subject(UUID.randomUUID().toString()).claim("org_id", orgId))
-                .authorities(new SimpleGrantedAuthority("ROLE_PLATFORM_ADMIN"),
-                        new SimpleGrantedAuthority("ROLE_ADMIN"));
+                .authorities(new SimpleGrantedAuthority("ROLE_ADMIN"));
     }
 
     // ── auth gate ────────────────────────────────────────────────────────────────────────
@@ -89,6 +97,13 @@ class FolderTemplateAdminIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data", hasSize(greaterThanOrEqualTo(17))))
                 .andExpect(jsonPath("$.data[?(@.isDeleteFolder == true && @.isActive == true)]", hasSize(1)))
                 .andExpect(jsonPath("$.data[?(@.isOldLoanArchive == true && @.isActive == true)]", hasSize(1)));
+    }
+
+    @Test
+    void platformAdminWithoutTenantAdminRoleIsAlsoAllowed() throws Exception {
+        mvc.perform(get("/api/admin/folder-templates").with(platformAdminOnly()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data", hasSize(greaterThanOrEqualTo(17))));
     }
 
     // ── create + dup display_name → 400 ──────────────────────────────────────────────────

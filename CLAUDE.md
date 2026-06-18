@@ -89,11 +89,15 @@ reasonable calls, he'll redirect. Verify by running the thing, not just assertin
     `findByIdAndOrgId`; reject JWTs with no `org_id` claim (avoid NIL-org writes); ADMIN-role cross-tenant test.
 - **Portability:** external services behind ports with swappable adapters — storage
   (`platform.storage.BlobStoragePort`), AI, email, payments, webhooks. Backend = a Docker image that runs on
-  any cloud. ⚠️ **Auth is NOT yet a port:** it's Spring Security OAuth2 resource-server (OIDC-JWT),
-  config-swappable for any OIDC IdP (Auth0/Keycloak) via `issuer-uri`, but the Cognito-specific claim mapping
-  (`org_id`, `cognito:groups`) is currently inline in `app/config` (`SecurityConfig` +
-  `OrgScopedJwtAuthenticationConverter` + `CognitoRolesConverter`). A provider-neutral principal/tenant-claim
-  **port** is a planned deliverable of the cutover auth/role-reconciliation phase. Config-driven per env/tenant.
+  any cloud. **Auth principal IS now port-backed** (cutover Phase 2/3 T3, M1): the principal-reading side is the
+  provider-neutral `platform.security.PrincipalPort` (`id/email/name/orgId/roles`), with the OIDC-JWT/Cognito impl
+  in `platform.security.JwtPrincipalAdapter` (the one place that knows the Cognito claim shape — `sub`/`email`/
+  `name`+`given_name`/`family_name`/`org_id` constants centralized there). `CurrentUser` is now a thin facade that
+  delegates to the injected `PrincipalPort`, so callers are unchanged; a non-Cognito IdP just supplies a different
+  adapter. The Spring Security **filter wiring stays the Cognito-specific adapter at the filter layer**: OAuth2
+  resource-server (OIDC-JWT), config-swappable for any OIDC IdP (Auth0/Keycloak) via `issuer-uri`, with the
+  Cognito claim mapping (`org_id` fail-closed, `cognito:groups` role allowlist) in `app/config` (`SecurityConfig` +
+  `OrgScopedJwtAuthenticationConverter` + `CognitoRolesConverter`) — behavior unchanged. Config-driven per env/tenant.
 - **Sequencing:** **Platform Foundation (multi-tenancy + port seams) lands before the 1003 sections.**
 - **AI:** provider-agnostic (`AiPort`) with OpenAI / Anthropic-Claude / DeepSeek adapters; provider+model+key per tenant. (Own spec.)
 - **Integrations:** partner REST API + signed inbound/outbound webhooks, per tenant. (Own milestone.)
