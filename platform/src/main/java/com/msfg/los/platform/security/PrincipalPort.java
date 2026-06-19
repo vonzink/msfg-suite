@@ -38,4 +38,15 @@ public interface PrincipalPort {
 
     /** The granted authorities as plain strings (e.g. {@code ROLE_LO}); empty if unauthenticated. */
     Set<String> roles();
+
+    /**
+     * Whether the IdP asserts the principal's email is verified.
+     *
+     * <p><strong>Fail-closed:</strong> returns {@code false} whenever the assertion is absent, false,
+     * or the principal is unauthenticated — only an explicit, present, {@code true} assertion yields
+     * {@code true}. Security-sensitive flows (e.g. verified-email account linking) gate on this, so a
+     * missing or ambiguous claim must never be treated as verified. The default adapter
+     * ({@link JwtPrincipalAdapter}) reads the OIDC {@code email_verified} claim.
+     */
+    boolean emailVerified();
 }

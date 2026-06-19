@@ -69,6 +69,7 @@ public class LocalDevSecurityConfig {
                 .subject(DEV_USER_ID)
                 .claim("cognito:groups", List.of("ADMIN"))
                 .claim("org_id", DEV_ORG_ID)
+                .claim("email_verified", true)
                 .issuedAt(Instant.now())
                 .expiresAt(Instant.now().plusSeconds(3600))
                 .build();

@@ -2,6 +2,7 @@ package com.msfg.los.parties.repo;
 
 import com.msfg.los.parties.domain.BorrowerParty;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -55,4 +56,41 @@ public interface BorrowerRepository extends JpaRepository<BorrowerParty, UUID> {
                   or lower(concat(b.firstName, ' ', b.lastName)) like :q)
            """)
     List<UUID> findLoanIdsByPrimaryBorrowerNameLike(@Param("q") String q);
+
+    /**
+     * Ids of UNLINKED borrower rows in the current tenant whose email matches {@code email}
+     * case-insensitively ({@code lower(email) = lower(:email)} AND {@code user_id IS NULL}).
+     * Tenant-filtered by Hibernate {@code @TenantId} (JPQL).
+     *
+     * <p>The account-takeover defense: the adapter links only when this returns EXACTLY ONE id, and
+     * the {@code user_id IS NULL} predicate guarantees an already-linked row is never a candidate
+     * (no overwrite). A rows-with-null-email row never matches (the equality excludes nulls).
+     *
+     * <p>Drives {@link com.msfg.los.parties.service.BorrowerUserLinkAdapter#linkByVerifiedEmail}.
+     */
+    @Query("""
+           select b.id from BorrowerParty b
+           where b.userId is null
+             and lower(b.email) = lower(:email)
+           """)
+    List<UUID> findUnlinkedIdsByEmailIgnoreCase(@Param("email") String email);
+
+    /**
+     * Stamps {@code user_id = :userId} on the single borrower row {@code :id}, but only while it is
+     * still unlinked ({@code user_id IS NULL}). Tenant-filtered by Hibernate {@code @TenantId}.
+     *
+     * <p>The {@code user_id IS NULL} guard makes the write idempotent and never an overwrite even
+     * under a race: a concurrent stamp leaves rows-affected = 0. Returns the number of rows updated
+     * (0 or 1).
+     *
+     * <p>Drives {@link com.msfg.los.parties.service.BorrowerUserLinkAdapter#linkByVerifiedEmail}.
+     *
+     * <p>{@code flushAutomatically} only (NOT {@code clearAutomatically}): the linker loads no
+     * {@code BorrowerParty} entities, so there is nothing stale to clear — and clearing the shared
+     * persistence context would detach the {@code user_account} just materialized in the same
+     * {@code /me} transaction.
+     */
+    @Modifying(flushAutomatically = true)
+    @Query("update BorrowerParty b set b.userId = :userId where b.id = :id and b.userId is null")
+    int linkUserIfUnlinked(@Param("id") UUID id, @Param("userId") UUID userId);
 }

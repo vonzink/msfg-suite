@@ -117,6 +117,47 @@ class JwtPrincipalAdapterTest {
     }
 
     @Test
+    void emailVerifiedTrueOnlyWhenClaimIsBooleanTrue() {
+        Jwt jwt = jwt().subject("s").claim("email_verified", true).build();
+        authenticate(jwt);
+        assertThat(adapter.emailVerified()).isTrue();
+    }
+
+    @Test
+    void emailVerifiedTrueWhenClaimIsStringTrue() {
+        // Some IdPs stringify the claim — accept "true"/"TRUE" but nothing looser.
+        Jwt jwt = jwt().subject("s").claim("email_verified", "true").build();
+        authenticate(jwt);
+        assertThat(adapter.emailVerified()).isTrue();
+    }
+
+    @Test
+    void emailVerifiedFalseWhenClaimBooleanFalse() {
+        Jwt jwt = jwt().subject("s").claim("email_verified", false).build();
+        authenticate(jwt);
+        assertThat(adapter.emailVerified()).isFalse();
+    }
+
+    @Test
+    void emailVerifiedFailsClosedWhenClaimAbsent() {
+        Jwt jwt = jwt().subject("s").build();
+        authenticate(jwt);
+        assertThat(adapter.emailVerified()).isFalse();
+    }
+
+    @Test
+    void emailVerifiedFailsClosedForNonBooleanNonTrueString() {
+        Jwt jwt = jwt().subject("s").claim("email_verified", "yes").build();
+        authenticate(jwt);
+        assertThat(adapter.emailVerified()).isFalse();
+    }
+
+    @Test
+    void emailVerifiedFailsClosedWhenUnauthenticated() {
+        assertThat(adapter.emailVerified()).isFalse();
+    }
+
+    @Test
     void claimAccessorsEmptyWhenAuthenticationIsNotJwt() {
         // roles() still derives from authorities (any auth); the claim accessors require a JWT token.
         SecurityContextHolder.getContext().setAuthentication(
@@ -127,6 +168,7 @@ class JwtPrincipalAdapterTest {
         assertThat(adapter.email()).isEmpty();
         assertThat(adapter.name()).isEmpty();
         assertThat(adapter.orgId()).isEmpty();
+        assertThat(adapter.emailVerified()).isFalse();
         assertThat(adapter.roles()).containsExactly("ROLE_ADMIN");
     }
 }

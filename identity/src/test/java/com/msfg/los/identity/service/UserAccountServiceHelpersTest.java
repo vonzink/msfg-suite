@@ -44,4 +44,20 @@ class UserAccountServiceHelpersTest {
         assertThat(UserAccountService.primaryRole(Set.of("ROLE_PLATFORM_ADMIN"))).isNull();
         assertThat(UserAccountService.primaryRole(null)).isNull();
     }
+
+    @Test
+    void primaryRole_partyRolesRankLowestBelowLo() {
+        // BORROWER and REAL_ESTATE_AGENT are the lowest priority — a party role alone resolves to
+        // itself, but any staff role (down to LO) outranks them.
+        assertThat(UserAccountService.primaryRole(Set.of(Role.BORROWER.authority())))
+                .isEqualTo("BORROWER");
+        assertThat(UserAccountService.primaryRole(Set.of(Role.REAL_ESTATE_AGENT.authority())))
+                .isEqualTo("REAL_ESTATE_AGENT");
+        assertThat(UserAccountService.primaryRole(
+                Set.of(Role.LO.authority(), Role.BORROWER.authority())))
+                .isEqualTo("LO");
+        assertThat(UserAccountService.primaryRole(
+                Set.of(Role.BORROWER.authority(), Role.REAL_ESTATE_AGENT.authority())))
+                .isEqualTo("BORROWER"); // BORROWER ranks above REAL_ESTATE_AGENT
+    }
 }

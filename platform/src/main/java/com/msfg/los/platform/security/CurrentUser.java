@@ -46,6 +46,14 @@ public class CurrentUser {
         return principal.roles();
     }
 
+    /**
+     * Whether the IdP asserts the caller's email is verified (fail-closed — see
+     * {@link PrincipalPort#emailVerified()}). Gate verified-email account linking on this.
+     */
+    public boolean emailVerified() {
+        return principal.emailVerified();
+    }
+
     public boolean isAdmin() {
         return roles().contains(Role.ADMIN.authority());
     }
