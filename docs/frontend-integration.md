@@ -156,6 +156,27 @@ Exact schemas: see `/v3/api-docs`.
 Disclosures ✅ shipped (TRID LE/CD).** Coming next (additive): real vendor adapters (DU/LPA/credit/disclosure onboarding) → AI milestone; plus small deferred bits — Details-of-Transaction/
 cash-to-close (Spec 6C), down-payment-source checkboxes, multi-lien/joint REO. Watch `/v3/api-docs` + `docs/ROADMAP.md`.*
 
+## Phase F — Borrower / Agent self-service access (NEW, merged `b2e2d85`)
+The unified-integration foundation: a **BORROWER** or **REAL_ESTATE_AGENT** Cognito token can now call
+msfg-suite directly and is scoped to **their own loans only**. (Cognito groups `Borrower` / `RealEstateAgent`
+are accepted via an alias map; the staff roles are unchanged.)
+
+- **Identity:** `GET /api/me` (materializes the user on first call) · `GET /api/me/loans` — now **role-aware**:
+  borrower → their linked loans, agent → assigned loans, staff → org-wide, LO → own (empty list if a
+  party has no links — never all). A borrower with a **verified email** is auto-linked to their borrower
+  record on first `/me` (single exact-email match); staff can also link/override (below).
+- **Borrower/agent reads (own loan only):** `GET /api/loans/{id}` (summary) · `GET /api/loans/{id}/status/transitions`.
+- **Borrower own 1003 data (their `borrowerId` only):** `GET /api/loans/{id}/borrowers/{borrowerId}/{income|employments|assets|liabilities|declarations|demographics}`.
+- **Staff-only management:** `POST /api/loans/{loanId}/borrowers/{borrowerId}/link-user {userId}` (link/override a borrower→Cognito-sub) ·
+  `POST|GET|DELETE /api/loans/{loanId}/agents` (assign/list/unassign; body `{userId, agentRole: BUYERS_AGENT|LISTING_AGENT|DUAL_AGENT}`).
+- **Hard boundaries (403, `ApiError` envelope `{success:false, code:"FORBIDDEN", …}`):** borrowers/agents are denied on
+  ALL writes, NPI (`reveal-ssn`, co-borrower data), loan-level aggregates (`/income/summary`, `/assets/summary`, `/liabilities/summary`, `/*/verifications`),
+  documents, the pipeline list/search, and anything not in the allowlist above. Agents additionally get **no borrower NPI** at all. Cross-tenant → 404.
+- **Contract stability:** stable `operationId`s pinned on the FE-consumed loan/me/borrower/agent endpoints
+  (`listLoans`, `getLoan`, `getMyLoans`, `linkBorrowerUser`, `assignLoanAgent`, …) so `gen:api` client methods don't churn.
+- **CORS:** `https://app.msfgco.com` + `https://los.msfgco.com` allowed in dev/prod (override via `LOS_CORS_ALLOWED_ORIGINS`); `allowCredentials=false` (Bearer JWT).
+- ⚠️ **Deploy dependency:** live borrower/agent auth needs the Cognito pool to emit `org_id` + the `Borrower`/`RealEstateAgent` groups + `email_verified`. Until then (local/dev), borrower auto-link stays **dormant (fail-closed)** — correct, not a bug.
+
 ## Design inputs (use these)
 The UI is modeled on **UWM EASE**. Rich design material already lives in this repo:
 - `docs/reference/uwm-ease-frontend-schematic.md` — page/section structure (incl. the 1003 sections).
