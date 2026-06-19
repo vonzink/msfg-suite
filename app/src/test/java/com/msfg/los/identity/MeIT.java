@@ -22,9 +22,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Functional ITs for GET /api/me + /api/me/loans (cutover Phase 2/3 T2):
+ * Functional ITs for GET /api/me + /api/me/loans (cutover Phase 2/3 T2 + Phase F T7):
  * materialize-once idempotency, JWT-claim projection, role refresh, role-scoped loan listing,
- * and tenant isolation across two orgs.
+ * borrower/agent-linked loan scoping, and tenant isolation across two orgs.
  */
 class MeIT extends AbstractIntegrationTest {
 
@@ -149,6 +149,13 @@ class MeIT extends AbstractIntegrationTest {
         }
     }
 
+    private int myLoansTotal(RequestPostProcessor who) throws Exception {
+        String body = mvc.perform(get("/api/me/loans?size=100&page=0").with(who))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return JsonPath.parse(body).read("$.data.total", Integer.class);
+    }
+
     @Test
     void meLoans_orgWideRoleSeesAnotherLosLoan() throws Exception {
         String id = createLoanOwnedBy(UUID.randomUUID().toString());
@@ -170,6 +177,132 @@ class MeIT extends AbstractIntegrationTest {
         RequestPostProcessor me = as(mySub, "ROLE_LO");
         assertThat(myLoansContains(me, myLoan)).as("LO sees own loan").isTrue();
         assertThat(myLoansContains(me, otherLoan)).as("LO does not see another LO's loan").isFalse();
+    }
+
+    // ── /me/loans — BORROWER-linked scoping (Phase F T7) ──────────────────────
+
+    /** Seeds a borrower_party row linked to the given userId. Returns the borrower_party id. */
+    private UUID seedBorrower(String orgId, String loanId, UUID userId) {
+        UUID id = UUID.randomUUID();
+        jdbc.update(
+            "insert into borrower_party " +
+            "(id,version,org_id,loan_id,is_primary,ordinal,email,user_id) " +
+            "values (?,0,?::uuid,?::uuid,true,0,?,?)",
+            id, orgId, loanId, id + "@test.local", userId);
+        return id;
+    }
+
+    /** Seeds a loan_agent row linking userId to a loan. */
+    private void seedAgent(String orgId, String loanId, UUID userId) {
+        jdbc.update(
+            "insert into loan_agent (id,version,org_id,loan_id,user_id,agent_role,ordinal) " +
+            "values (?,0,?::uuid,?::uuid,?,'BUYERS_AGENT',0)",
+            UUID.randomUUID(), orgId, loanId, userId);
+    }
+
+    @Test
+    void meLoans_borrowerSeesOnlyLinkedLoans() throws Exception {
+        String loSub = UUID.randomUUID().toString();
+        String loan1 = createLoanOwnedBy(loSub);
+        String loan2 = createLoanOwnedBy(loSub);
+        String unrelatedLoan = createLoanOwnedBy(UUID.randomUUID().toString());
+
+        UUID borrowerUserId = UUID.randomUUID();
+        seedBorrower(DEFAULT_ORG, loan1, borrowerUserId);
+        seedBorrower(DEFAULT_ORG, loan2, borrowerUserId);
+        // unrelatedLoan is NOT linked to borrowerUserId
+
+        RequestPostProcessor borrower = as(borrowerUserId.toString(), "ROLE_BORROWER");
+        assertThat(myLoansContains(borrower, loan1)).as("borrower sees linked loan1").isTrue();
+        assertThat(myLoansContains(borrower, loan2)).as("borrower sees linked loan2").isTrue();
+        assertThat(myLoansContains(borrower, unrelatedLoan)).as("borrower does NOT see unlinked loan").isFalse();
+    }
+
+    @Test
+    void meLoans_borrowerWithNoLinks_returnsEmptyPage() throws Exception {
+        // Create a loan that exists in the org — borrower must NOT see it
+        createLoanOwnedBy(UUID.randomUUID().toString());
+
+        UUID unlinkedBorrower = UUID.randomUUID();
+        // no borrower_party row links this user
+
+        int total = myLoansTotal(as(unlinkedBorrower.toString(), "ROLE_BORROWER"));
+        assertThat(total).as("borrower with no links sees zero loans (not all loans)").isZero();
+    }
+
+    @Test
+    void meLoans_borrowerPaginationWorksCorrectly() throws Exception {
+        String loSub = UUID.randomUUID().toString();
+        UUID borrowerUserId = UUID.randomUUID();
+
+        // Create 3 loans and link the borrower to all 3
+        for (int i = 0; i < 3; i++) {
+            String loanId = createLoanOwnedBy(loSub);
+            seedBorrower(DEFAULT_ORG, loanId, borrowerUserId);
+        }
+
+        RequestPostProcessor borrower = as(borrowerUserId.toString(), "ROLE_BORROWER");
+
+        // page size=2: first page has 2, totalItems=3
+        String body = mvc.perform(get("/api/me/loans?size=2&page=0").with(borrower))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        var doc = JsonPath.parse(body);
+        assertThat((Integer) doc.read("$.data.total")).as("total 3 linked loans").isEqualTo(3);
+        assertThat(((List<?>) doc.read("$.data.items")).size()).as("page 0 has 2 items").isEqualTo(2);
+
+        // page 1 has the remaining 1
+        String body2 = mvc.perform(get("/api/me/loans?size=2&page=1").with(borrower))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        assertThat(((List<?>) JsonPath.parse(body2).read("$.data.items")).size())
+                .as("page 1 has 1 item").isEqualTo(1);
+    }
+
+    @Test
+    void meLoans_softDeletedLinkedLoanIsExcluded() throws Exception {
+        String loSub = UUID.randomUUID().toString();
+        String loanId = createLoanOwnedBy(loSub);
+
+        UUID borrowerUserId = UUID.randomUUID();
+        seedBorrower(DEFAULT_ORG, loanId, borrowerUserId);
+
+        // Soft-delete the loan via the API (requires staff auth)
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .delete("/api/loans/" + loanId)
+                        .with(as(loSub, "ROLE_ADMIN")))
+                .andExpect(status().isOk());
+
+        // Borrower must not see the soft-deleted loan
+        int total = myLoansTotal(as(borrowerUserId.toString(), "ROLE_BORROWER"));
+        assertThat(total).as("soft-deleted linked loan is excluded").isZero();
+    }
+
+    @Test
+    void meLoans_agentSeesOnlyLinkedLoans() throws Exception {
+        String loSub = UUID.randomUUID().toString();
+        String loan1 = createLoanOwnedBy(loSub);
+        String unrelatedLoan = createLoanOwnedBy(UUID.randomUUID().toString());
+
+        UUID agentUserId = UUID.randomUUID();
+        seedAgent(DEFAULT_ORG, loan1, agentUserId);
+        // unrelatedLoan is NOT linked
+
+        RequestPostProcessor agent = as(agentUserId.toString(), "ROLE_REAL_ESTATE_AGENT");
+        assertThat(myLoansContains(agent, loan1)).as("agent sees linked loan").isTrue();
+        assertThat(myLoansContains(agent, unrelatedLoan)).as("agent does NOT see unlinked loan").isFalse();
+    }
+
+    @Test
+    void meLoans_agentWithNoLinks_returnsEmptyPage() throws Exception {
+        // Create a loan — agent must NOT see it
+        createLoanOwnedBy(UUID.randomUUID().toString());
+
+        UUID unlinkedAgent = UUID.randomUUID();
+        // no loan_agent row links this user
+
+        int total = myLoansTotal(as(unlinkedAgent.toString(), "ROLE_REAL_ESTATE_AGENT"));
+        assertThat(total).as("agent with no links sees zero loans (not all loans)").isZero();
     }
 
     // ── tenant isolation ───────────────────────────────────────────────────────
