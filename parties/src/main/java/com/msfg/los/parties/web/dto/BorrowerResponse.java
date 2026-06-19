@@ -10,6 +10,7 @@ public record BorrowerResponse(
     String middleName, String suffix, String ssnLast4, String ssnMasked, LocalDate dateOfBirth,
     MaritalStatus maritalStatus, Integer dependentsCount, String dependentAges, CitizenshipType citizenshipType,
     Boolean veteran, Boolean unmarriedAddendumSpousalRights, UUID joinedToBorrowerId,
+    UUID userId,
     String homePhone, String cellPhone, String workPhone, String workPhoneExt, String email, Boolean noEmail) {
     public static BorrowerResponse from(BorrowerParty b) {
         return new BorrowerResponse(b.getId(), b.getLoanId(), b.isPrimary(), b.getOrdinal(),
@@ -17,6 +18,7 @@ public record BorrowerResponse(
             SsnSupport.last4(b.getSsn()), SsnSupport.maskedDisplay(b.getSsn()), b.getDateOfBirth(),
             b.getMaritalStatus(), b.getDependentsCount(), b.getDependentAges(), b.getCitizenshipType(),
             b.getVeteran(), b.getUnmarriedAddendumSpousalRights(), b.getJoinedToBorrowerId(),
+            b.getUserId(),
             b.getHomePhone(), b.getCellPhone(), b.getWorkPhone(), b.getWorkPhoneExt(), b.getEmail(), b.getNoEmail());
     }
 }

@@ -106,6 +106,24 @@ public class BorrowerService {
         }
     }
 
+    /**
+     * Staff override: set (or overwrite) {@code user_id} on the borrower to link them to a user
+     * account. Unlike auto-link, this MAY overwrite a non-null {@code userId} — that is the point
+     * (staff correcting a wrong or missing link).
+     *
+     * <p>Access: {@link LoanAccessGuard#assertCanAccess} gates this exactly as other write
+     * endpoints — org-wide for PROCESSOR/UNDERWRITER/CLOSER/MANAGER/ADMIN, owner-scoped for LO.
+     * BORROWER, REAL_ESTATE_AGENT, and PLATFORM_ADMIN are excluded from org-wide view and are not
+     * loan officers, so {@code assertCanAccess} throws 403 for all three.
+     */
+    @Transactional
+    public BorrowerParty linkUser(UUID loanId, UUID borrowerId, UUID userId) {
+        accessGuard.assertCanAccess(loanService.get(loanId));
+        BorrowerParty b = load(loanId, borrowerId);
+        b.setUserId(userId);
+        return b;
+    }
+
     /** Full SSN (123-45-6789) + writes an audited PiiAccessLog row. Loan-authorized. Read-write tx (the audit must flush). */
     @Transactional
     public String revealSsn(UUID loanId, UUID borrowerId, String reason) {

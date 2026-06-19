@@ -3,6 +3,7 @@ package com.msfg.los.parties.web;
 import com.msfg.los.parties.service.BorrowerService;
 import com.msfg.los.parties.web.dto.AddBorrowerRequest;
 import com.msfg.los.parties.web.dto.BorrowerResponse;
+import com.msfg.los.parties.web.dto.LinkUserRequest;
 import com.msfg.los.parties.web.dto.RevealSsnRequest;
 import com.msfg.los.parties.web.dto.RevealSsnResponse;
 import com.msfg.los.parties.web.dto.UpdateBorrowerRequest;
@@ -58,5 +59,18 @@ public class BorrowerController {
             @PathVariable UUID loanId, @PathVariable UUID borrowerId,
             @Valid @RequestBody RevealSsnRequest req) {
         return ApiResponse.ok(new RevealSsnResponse(service.revealSsn(loanId, borrowerId, req.reason())));
+    }
+
+    /**
+     * Staff override: set (or replace) the {@code userId} link on a borrower. Allowed for LO
+     * (owner), PROCESSOR, UNDERWRITER, CLOSER, MANAGER, and ADMIN. BORROWER, REAL_ESTATE_AGENT,
+     * and PLATFORM_ADMIN receive 403 via {@link com.msfg.los.loan.service.LoanAccessGuard}.
+     */
+    @PostMapping("/{borrowerId}/link-user")
+    public ApiResponse<BorrowerResponse> linkUser(
+            @PathVariable UUID loanId,
+            @PathVariable UUID borrowerId,
+            @Valid @RequestBody LinkUserRequest req) {
+        return ApiResponse.ok(BorrowerResponse.from(service.linkUser(loanId, borrowerId, req.userId())));
     }
 }
