@@ -57,6 +57,52 @@ class CognitoRolesConverterTest {
     }
 
     @Test
+    void mapsRealCognitoPoolGroupStringsToSuiteRoles() {
+        // The shared Cognito pool (inherited from mortgage-app) emits these exact group strings.
+        Jwt jwt = Jwt.withTokenValue("t").header("alg", "none").subject("u")
+            .claim("cognito:groups", List.of("Admin", "Manager", "LO", "Processor", "Borrower", "RealEstateAgent"))
+            .issuedAt(Instant.now()).expiresAt(Instant.now().plusSeconds(60)).build();
+        assertThat(converter.convert(jwt)).extracting(GrantedAuthority::getAuthority)
+            .containsExactlyInAnyOrder(
+                "ROLE_ADMIN", "ROLE_MANAGER", "ROLE_LO", "ROLE_PROCESSOR",
+                "ROLE_BORROWER", "ROLE_REAL_ESTATE_AGENT");
+    }
+
+    @Test
+    void mapsBorrowerAndRealEstateAgentPoolGroupsToNewRoles() {
+        Jwt jwt = Jwt.withTokenValue("t").header("alg", "none").subject("u")
+            .claim("cognito:groups", List.of("Borrower", "RealEstateAgent"))
+            .issuedAt(Instant.now()).expiresAt(Instant.now().plusSeconds(60)).build();
+        assertThat(converter.convert(jwt)).extracting(GrantedAuthority::getAuthority)
+            .containsExactlyInAnyOrder(Role.BORROWER.authority(), Role.REAL_ESTATE_AGENT.authority());
+    }
+
+    @Test
+    void dropsDormantExternalPoolGroupWithNoSuiteEquivalent() {
+        Jwt jwt = Jwt.withTokenValue("t").header("alg", "none").subject("u")
+            .claim("cognito:groups", List.of("LO", "External"))
+            .issuedAt(Instant.now()).expiresAt(Instant.now().plusSeconds(60)).build();
+        assertThat(converter.convert(jwt)).extracting(GrantedAuthority::getAuthority)
+            .containsExactly("ROLE_LO");
+    }
+
+    @Test
+    void dropsMisCasedAndJunkVariants_failClosed() {
+        // Matching is case-sensitive: only the exact pool strings / enum names resolve.
+        Jwt jwt = Jwt.withTokenValue("t").header("alg", "none").subject("u")
+            .claim("cognito:groups", List.of("borrower", "realestateagent", "REALESTATEAGENT",
+                "admin", "GARBAGE", "Lo"))
+            .issuedAt(Instant.now()).expiresAt(Instant.now().plusSeconds(60)).build();
+        assertThat(converter.convert(jwt)).isEmpty();
+    }
+
+    @Test
+    void newRolesYieldExpectedAuthorityStrings() {
+        assertThat(Role.BORROWER.authority()).isEqualTo("ROLE_BORROWER");
+        assertThat(Role.REAL_ESTATE_AGENT.authority()).isEqualTo("ROLE_REAL_ESTATE_AGENT");
+    }
+
+    @Test
     void emptyWhenNoGroups() {
         Jwt jwt = Jwt.withTokenValue("t").header("alg", "none").subject("u")
             .issuedAt(Instant.now()).expiresAt(Instant.now().plusSeconds(60)).build();
