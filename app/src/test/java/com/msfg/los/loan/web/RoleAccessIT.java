@@ -218,6 +218,18 @@ class RoleAccessIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void linkedBorrowerCanReadOwnLoanSummaryWithQueryString() throws Exception {
+        String id = createLoanOwnedByLoA();
+        String borrowerSub = UUID.randomUUID().toString();
+        addLinkedBorrower(id, borrowerSub);
+        // RegexRequestMatcher appends the query string to the matched URL; the matcher's optional
+        // (\?.*)? suffix must let a party read its OWN loan WITH query params (guards a 403 regression).
+        mvc.perform(get("/api/loans/" + id + "?include=summary").with(as(borrowerSub, "ROLE_BORROWER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(id));
+    }
+
+    @Test
     void linkedBorrowerCanReadOwnLoanTransitions() throws Exception {
         String id = createLoanOwnedByLoA();
         String borrowerSub = UUID.randomUUID().toString();
@@ -362,6 +374,35 @@ class RoleAccessIT extends AbstractIntegrationTest {
         mvc.perform(patch("/api/loans/{id}", id).with(as(LO_A, "ROLE_BORROWER"))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"city\":\"Austin\"}"))
                 .andExpect(status().isForbidden());
+    }
+
+    // ── Matcher tightening — party allowlist matches ONLY a UUID-shaped loan id ──────────
+    // A FUTURE single-segment GET (/api/loans/export, /api/loans/stats, …) must NOT silently
+    // inherit the party (BORROWER/REAL_ESTATE_AGENT) allowlist via an Ant /api/loans/* wildcard.
+    // A non-UUID single-segment GET falls through to the staff-only catch-all → party token 403.
+
+    @Test
+    void borrowerOnNonUuidSingleSegmentGetIsForbiddenAtFilter() throws Exception {
+        String borrowerSub = UUID.randomUUID().toString();
+        // "export" and an arbitrary non-UUID string are both single-segment but not UUID-shaped:
+        // the party allowlist regex does not match, so the staff-only catch-all denies the party.
+        mvc.perform(get("/api/loans/export").with(as(borrowerSub, "ROLE_BORROWER")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+        mvc.perform(get("/api/loans/bogus-not-a-uuid").with(as(borrowerSub, "ROLE_BORROWER")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    }
+
+    @Test
+    void agentOnNonUuidSingleSegmentTransitionsIsForbiddenAtFilter() throws Exception {
+        // The /status/transitions allowlist is likewise UUID-constrained.
+        String agentSub = UUID.randomUUID().toString();
+        mvc.perform(get("/api/loans/export/status/transitions").with(as(agentSub, "ROLE_REAL_ESTATE_AGENT")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
     }
 
     // ── Cross-tenant — a party linked in another org never reaches this org's loan ───────

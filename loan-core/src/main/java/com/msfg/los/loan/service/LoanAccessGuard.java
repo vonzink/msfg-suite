@@ -69,6 +69,10 @@ public class LoanAccessGuard {
     /**
      * Explicit write gate — identical semantics to {@link #assertCanAccess(Loan)} (staff-or-owning-LO),
      * named for call-site clarity at mutation endpoints. Borrowers/agents never pass.
+     *
+     * <p>{@code LoanController} writes (PATCH update, POST status-transition, DELETE soft-delete) use
+     * this; other modules' writes still call {@link #assertCanAccess(Loan)} (functionally identical)
+     * pending migration.
      */
     public void assertCanModify(Loan loan) {
         if (!isStaffOrOwningLo(loan)) {

@@ -11,6 +11,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.util.matcher.RegexRequestMatcher;
 
 // Real Cognito JWT resource-server security — active in every profile EXCEPT "local".
 // Local dev uses LocalDevSecurityConfig (no external IdP needed). dev/prod/test use this.
@@ -39,11 +40,14 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         ApiErrorAuthenticationEntryPoint entryPoint = new ApiErrorAuthenticationEntryPoint(objectMapper);
+        ApiErrorAccessDeniedHandler accessDeniedHandler = new ApiErrorAccessDeniedHandler(objectMapper);
         http
             .cors(org.springframework.security.config.Customizer.withDefaults())
             .csrf(c -> c.disable())
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .exceptionHandling(e -> e.authenticationEntryPoint(entryPoint))
+            .exceptionHandling(e -> e
+                .authenticationEntryPoint(entryPoint)        // 401 → ApiError envelope
+                .accessDeniedHandler(accessDeniedHandler))   // filter-layer 403 → ApiError envelope
             .authorizeHttpRequests(reg -> reg
                 .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
@@ -80,8 +84,18 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/loans/number/**").hasAnyRole(STAFF)
                 .requestMatchers(HttpMethod.GET, "/api/me", "/api/me/loans")
                     .hasAnyRole(STAFF_AND_PARTY)
-                .requestMatchers(HttpMethod.GET, "/api/loans/*").hasAnyRole(STAFF_AND_PARTY)
-                .requestMatchers(HttpMethod.GET, "/api/loans/*/status/transitions").hasAnyRole(STAFF_AND_PARTY)
+                // UUID-constrained (NOT an Ant single-segment wildcard): the party allowlist must match
+                // ONLY a real loan id, never a future single-segment GET like /api/loans/export or
+                // /api/loans/stats — those would otherwise silently inherit BORROWER/REAL_ESTATE_AGENT
+                // access. A non-UUID single-segment GET no longer matches here and falls through to the
+                // staff-only /api/** catch-all below (party token → 403 at the filter). RegexRequestMatcher
+                // is fully anchored (Matcher.matches) AND appends the query string to the matched URL, so
+                // each pattern ends with an optional (\?.*)? — otherwise a party GET /api/loans/{id}?x=y
+                // would not match and would fall through to the staff-only catch-all (a 403 regression).
+                .requestMatchers(RegexRequestMatcher.regexMatcher(
+                        HttpMethod.GET, "/api/loans/[0-9a-fA-F-]{36}(\\?.*)?")).hasAnyRole(STAFF_AND_PARTY)
+                .requestMatchers(RegexRequestMatcher.regexMatcher(
+                        HttpMethod.GET, "/api/loans/[0-9a-fA-F-]{36}/status/transitions(\\?.*)?")).hasAnyRole(STAFF_AND_PARTY)
                 // Catch-all: every other API path is staff-only. Parties never reach writes or any
                 // non-allowlisted read (they are not in this authority set → 403 at the filter).
                 .requestMatchers("/api/**").hasAnyRole(STAFF)

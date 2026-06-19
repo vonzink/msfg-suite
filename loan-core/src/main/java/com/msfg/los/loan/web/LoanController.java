@@ -117,14 +117,14 @@ public class LoanController {
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@PathVariable UUID id) {
         Loan loan = service.get(id);     // 404 if missing or already soft-deleted
-        accessGuard.assertCanAccess(loan);   // owning LO (org-wide roles pass)
+        accessGuard.assertCanModify(loan);   // write gate: owning LO (org-wide roles pass)
         service.softDelete(id);
         return ApiResponse.ok(null);
     }
 
     @PatchMapping("/{id}")
     public ApiResponse<LoanSummaryResponse> update(@PathVariable UUID id, @Valid @RequestBody UpdateLoanRequest req) {
-        accessGuard.assertCanAccess(service.get(id));
+        accessGuard.assertCanModify(service.get(id));   // write gate
         return ApiResponse.ok(LoanSummaryResponse.from(service.update(id, req)));
     }
 
@@ -139,7 +139,7 @@ public class LoanController {
     @PostMapping("/{id}/status")
     public ApiResponse<LoanSummaryResponse> transition(@PathVariable UUID id, @Valid @RequestBody TransitionRequest req) {
         Loan loan = service.get(id);
-        accessGuard.assertCanAccess(loan);
+        accessGuard.assertCanModify(loan);   // write gate: status transition is a mutation
         Loan updated = service.transition(id, req, currentUser.roles());
         return ApiResponse.ok(LoanSummaryResponse.from(updated));
     }

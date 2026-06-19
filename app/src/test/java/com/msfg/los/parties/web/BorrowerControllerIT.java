@@ -160,15 +160,17 @@ class BorrowerControllerIT extends AbstractIntegrationTest {
         String borrowerId = addBorrower(loanId, "Bob", "Borrower", false);
         String userId = UUID.randomUUID().toString();
 
-        // Phase F T6: BORROWER is now denied at the SecurityConfig filter layer (link-user is not on
-        // the borrower/agent read allowlist), so the 403 arrives BEFORE the controller — no JSON
-        // envelope. Status-only assertion; defense-in-depth (was previously the controller guard).
+        // Phase F T6: BORROWER is denied at the SecurityConfig filter layer (link-user is not on the
+        // borrower/agent read allowlist), so the 403 arrives BEFORE the controller. The ApiError
+        // envelope is now rendered there by ApiErrorAccessDeniedHandler — same shape as controller 403s.
         mvc.perform(post("/api/loans/{l}/borrowers/{b}/link-user", loanId, borrowerId)
                         .with(jwt().jwt(j -> j.subject(UUID.randomUUID().toString()).claim("org_id", DEFAULT_ORG))
                                 .authorities(new SimpleGrantedAuthority("ROLE_BORROWER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"userId\":\"%s\"}".formatted(userId)))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
     }
 
     @Test
@@ -178,12 +180,15 @@ class BorrowerControllerIT extends AbstractIntegrationTest {
         String userId = UUID.randomUUID().toString();
 
         // Phase F T6: denied at the filter layer (non-allowlisted POST for a party role) — see above.
+        // ApiErrorAccessDeniedHandler renders the envelope on the filter-layer 403.
         mvc.perform(post("/api/loans/{l}/borrowers/{b}/link-user", loanId, borrowerId)
                         .with(jwt().jwt(j -> j.subject(UUID.randomUUID().toString()).claim("org_id", DEFAULT_ORG))
                                 .authorities(new SimpleGrantedAuthority("ROLE_REAL_ESTATE_AGENT")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"userId\":\"%s\"}".formatted(userId)))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
     }
 
     @Test
@@ -194,12 +199,15 @@ class BorrowerControllerIT extends AbstractIntegrationTest {
 
         // PLATFORM_ADMIN is staff-only-excluded from loan data; denied at the filter layer (T6 catch-all
         // requires a staff authority for non-allowlisted /api/** paths) — 403 before the controller.
+        // ApiErrorAccessDeniedHandler renders the envelope on the filter-layer 403.
         mvc.perform(post("/api/loans/{l}/borrowers/{b}/link-user", loanId, borrowerId)
                         .with(jwt().jwt(j -> j.subject(UUID.randomUUID().toString()).claim("org_id", DEFAULT_ORG))
                                 .authorities(new SimpleGrantedAuthority("ROLE_PLATFORM_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"userId\":\"%s\"}".formatted(userId)))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
     }
 
     @Test
