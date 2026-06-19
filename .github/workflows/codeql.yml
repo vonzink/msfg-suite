@@ -1,0 +1,59 @@
+name: "CodeQL"
+
+# Static analysis (GitHub code scanning) for the Java backend.
+# Uses build-mode: none — CodeQL analyzes the source directly without compiling,
+# so it never runs the Testcontainers integration tests (which require a Docker
+# daemon and Postgres) just to build an analysis database.
+#
+# NOTE: code scanning on a PRIVATE repo requires GitHub Advanced Security.
+# Without GHAS the analyze step fails at SARIF upload; the workflow activates
+# automatically once GHAS is enabled (or the repo is made public).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly full scan — Mondays 07:17 UTC (off-peak; avoids the top-of-hour cron herd).
+    - cron: "17 7 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (java-kotlin)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write   # upload SARIF results to code scanning
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # java-kotlin is the CodeQL language id covering all Java/Kotlin code.
+          - language: java-kotlin
+            build-mode: none
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-extended
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
