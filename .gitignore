@@ -4,6 +4,7 @@ build/
 .idea/
 *.iml
 .DS_Store
+.claude/
 /data/
 .env
 bin/
