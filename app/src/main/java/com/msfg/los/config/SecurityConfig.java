@@ -19,6 +19,15 @@ import org.springframework.security.web.SecurityFilterChain;
 @EnableMethodSecurity
 public class SecurityConfig {
 
+    // Role names (sans the ROLE_ prefix that hasAnyRole adds). PLATFORM_ADMIN is intentionally
+    // absent — platform operators administer orgs, not loan files (loan-data access is staff-only).
+    private static final String[] STAFF =
+            { "LO", "PROCESSOR", "UNDERWRITER", "CLOSER", "MANAGER", "ADMIN" };
+    // Staff PLUS the two self-service party roles, allowed only on the T6 read allowlist.
+    private static final String[] STAFF_AND_PARTY =
+            { "LO", "PROCESSOR", "UNDERWRITER", "CLOSER", "MANAGER", "ADMIN",
+              "BORROWER", "REAL_ESTATE_AGENT" };
+
     private final TenantContextFilter tenantFilter;
     private final ObjectMapper objectMapper;
 
@@ -52,7 +61,30 @@ public class SecurityConfig {
                 // parity). The owning-LO check is enforced in the service via the access guard.
                 .requestMatchers(HttpMethod.DELETE, "/api/loans/*").hasAnyRole("LO", "MANAGER", "ADMIN")
                 .requestMatchers("/api/org/**").hasRole("ADMIN")
-                .requestMatchers("/api/**").authenticated()
+                // ── Phase F T6 — party-role (BORROWER / REAL_ESTATE_AGENT) deny-by-default ───────
+                // Borrowers and agents may match ONLY the four allowlisted reads below; their own-loan
+                // scoping is then enforced at the controller by LoanAccessGuard.assertReadable. Every
+                // other /api/** path (writes + non-allowlisted reads: income, financials, declarations,
+                // reveal-ssn, conditions, notes, documents, search/number/pipeline, …) falls through to
+                // the staff-only catch-all and a party token is 403 there at the filter.
+                //
+                // Ordering is load-bearing (first match wins):
+                //   1. the staff-only loan LIST/lookup endpoints (pipeline, search, number) come FIRST,
+                //      because the single-segment wildcard /api/loans/* below would otherwise also match
+                //      /api/loans/search — keeping parties OUT of any list/lookup surface;
+                //   2. then the party-inclusive allowlist (me, me/loans, GET /api/loans/{id},
+                //      GET /api/loans/{id}/status/transitions);
+                //   3. then the staff-only catch-all for everything else under /api/**.
+                .requestMatchers(HttpMethod.GET, "/api/loans").hasAnyRole(STAFF)
+                .requestMatchers(HttpMethod.GET, "/api/loans/search").hasAnyRole(STAFF)
+                .requestMatchers(HttpMethod.GET, "/api/loans/number/**").hasAnyRole(STAFF)
+                .requestMatchers(HttpMethod.GET, "/api/me", "/api/me/loans")
+                    .hasAnyRole(STAFF_AND_PARTY)
+                .requestMatchers(HttpMethod.GET, "/api/loans/*").hasAnyRole(STAFF_AND_PARTY)
+                .requestMatchers(HttpMethod.GET, "/api/loans/*/status/transitions").hasAnyRole(STAFF_AND_PARTY)
+                // Catch-all: every other API path is staff-only. Parties never reach writes or any
+                // non-allowlisted read (they are not in this authority set → 403 at the filter).
+                .requestMatchers("/api/**").hasAnyRole(STAFF)
                 .anyRequest().denyAll())
             .oauth2ResourceServer(o -> o
                 .authenticationEntryPoint(entryPoint)

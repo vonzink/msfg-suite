@@ -89,7 +89,7 @@ public class LoanController {
     @GetMapping("/{id}")
     public ApiResponse<LoanSummaryResponse> get(@PathVariable UUID id) {
         Loan loan = service.get(id);
-        accessGuard.assertCanAccess(loan);
+        accessGuard.assertReadable(loan);   // staff/owning-LO OR a linked borrower/agent on THIS loan
         return ApiResponse.ok(LoanSummaryResponse.from(loan));
     }
 
@@ -131,7 +131,7 @@ public class LoanController {
     @GetMapping("/{id}/status/transitions")
     public ApiResponse<TransitionsResponse> transitions(@PathVariable UUID id) {
         Loan loan = service.get(id);
-        accessGuard.assertCanAccess(loan);
+        accessGuard.assertReadable(loan);   // read allowlist: staff/owning-LO OR linked borrower/agent
         return ApiResponse.ok(new TransitionsResponse(loan.getStatus(),
             lifecycle.allowedTransitions(loan.getStatus(), currentUser.roles())));
     }
