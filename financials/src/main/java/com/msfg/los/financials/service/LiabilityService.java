@@ -43,6 +43,16 @@ public class LiabilityService {
     }
 
     /**
+     * Read gate (T11): staff/owning-LO OR the borrower reading their OWN row. Writes keep the
+     * staff-only {@link #assertBorrowerInLoan}.
+     */
+    private void assertBorrowerSelfReadable(UUID loanId, UUID borrowerId) {
+        accessGuard.assertBorrowerSelfReadable(loanService.get(loanId), borrowerId);
+        if (!borrowerService.isBorrowerInLoan(loanId, borrowerId))
+            throw new NotFoundException("Borrower", borrowerId);
+    }
+
+    /**
      * Apply and validate the EFFECTIVE (merged) DTI pairing state on the entity.
      * Called after null-skip field merges so the entity already holds the effective values.
      *
@@ -109,7 +119,7 @@ public class LiabilityService {
 
     @Transactional(readOnly = true)
     public List<Liability> list(UUID loanId, UUID borrowerId) {
-        assertBorrowerInLoan(loanId, borrowerId);
+        assertBorrowerSelfReadable(loanId, borrowerId);
         return liabilities.findByBorrowerIdOrderByOrdinalAscIdAsc(borrowerId);
     }
 

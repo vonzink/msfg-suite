@@ -2,6 +2,7 @@ package com.msfg.los.identity.service;
 
 import com.msfg.los.identity.domain.UserAccount;
 import com.msfg.los.identity.repo.UserAccountRepository;
+import com.msfg.los.loan.service.BorrowerUserLinker;
 import com.msfg.los.platform.security.CurrentUser;
 import com.msfg.los.platform.security.Role;
 import com.msfg.los.platform.tenancy.TenantContext;
@@ -23,21 +24,28 @@ import java.util.regex.Pattern;
 @Service
 public class UserAccountService {
 
-    /** Highest-priority staff group wins as the persisted primary role. */
+    /**
+     * Highest-priority group wins as the persisted primary role. Staff roles rank above the
+     * external party roles ({@code BORROWER}, {@code REAL_ESTATE_AGENT}), which sit at the bottom:
+     * a staff member who also happens to carry a party group is still recorded as staff.
+     */
     private static final List<Role> ROLE_PRIORITY = List.of(
-            Role.ADMIN, Role.MANAGER, Role.UNDERWRITER, Role.CLOSER, Role.PROCESSOR, Role.LO);
+            Role.ADMIN, Role.MANAGER, Role.UNDERWRITER, Role.CLOSER, Role.PROCESSOR, Role.LO,
+            Role.BORROWER, Role.REAL_ESTATE_AGENT);
 
     private static final Pattern WORD_SPLIT = Pattern.compile("[\\s.,_-]+");
 
     private final UserAccountRepository users;
     private final CurrentUser currentUser;
     private final TenantContext tenantContext;
+    private final BorrowerUserLinker borrowerUserLinker;
 
     public UserAccountService(UserAccountRepository users, CurrentUser currentUser,
-                              TenantContext tenantContext) {
+                              TenantContext tenantContext, BorrowerUserLinker borrowerUserLinker) {
         this.users = users;
         this.currentUser = currentUser;
         this.tenantContext = tenantContext;
+        this.borrowerUserLinker = borrowerUserLinker;
     }
 
     @Transactional
@@ -46,13 +54,15 @@ public class UserAccountService {
         UUID sub = UUID.fromString(currentUser.id().orElseThrow(
                 () -> new IllegalStateException("authenticated principal has no subject")));
 
-        String email = currentUser.email()
-                .filter(e -> !e.isBlank())
-                .orElse(sub + "@unknown.local");
+        // The principal's real email (if any) — used both for the synthetic fallback and as the
+        // borrower-link match key. Keep it separate from `email` (which carries the fallback).
+        String principalEmail = currentUser.email().filter(e -> !e.isBlank()).orElse(null);
+        String email = principalEmail != null ? principalEmail : sub + "@unknown.local";
         String name = currentUser.name()
                 .filter(n -> !n.isBlank())
                 .orElse(email);
-        String role = primaryRole(currentUser.roles());
+        Set<String> roles = currentUser.roles();
+        String role = primaryRole(roles);
 
         // Prefer the PK match; fall back to the (org, email) unique key for a pre-existing row
         // whose id differs (e.g. email re-pointed to a new sub).
@@ -60,6 +70,7 @@ public class UserAccountService {
                 .or(() -> users.findByOrgIdAndEmail(org, email))
                 .orElse(null);
 
+        UserAccount account;
         if (existing != null) {
             boolean dirty = false;
             if (name != null && !name.equals(existing.getName())) {
@@ -71,17 +82,44 @@ public class UserAccountService {
                 existing.setRole(role);
                 dirty = true;
             }
-            return dirty ? users.save(existing) : existing;
+            account = dirty ? users.save(existing) : existing;
+        } else {
+            UserAccount u = new UserAccount();
+            u.setId(sub);
+            u.setOrgId(org);
+            u.setEmail(email);
+            u.setName(name);
+            u.setInitials(initials(name));
+            u.setRole(role);
+            account = users.save(u);
         }
 
-        UserAccount u = new UserAccount();
-        u.setId(sub);
-        u.setOrgId(org);
-        u.setEmail(email);
-        u.setName(name);
-        u.setInitials(initials(name));
-        u.setRole(role);
-        return users.save(u);
+        // Borrower auto-link (T5a): AFTER materialization, link this Cognito sub to a borrower_party
+        // row by VERIFIED email — and only if exactly one unlinked match exists (anti-takeover, see
+        // BorrowerUserLinker). Gated on the BORROWER role + a verified email; agents are NOT
+        // auto-linked. Idempotent — re-calling after a link is a no-op (the user_id IS NULL filter).
+        maybeLinkBorrower(roles, principalEmail, sub);
+
+        return account;
+    }
+
+    /**
+     * Links a signed-in borrower's {@code sub} to their {@code borrower_party} row by verified email.
+     * Fail-closed at every gate: only when the caller carries the {@code BORROWER} authority, the IdP
+     * asserts the email is verified, and a real (non-fallback) email is present. The unique-match +
+     * no-overwrite guarantees live in {@link BorrowerUserLinker#linkByVerifiedEmail}.
+     */
+    private void maybeLinkBorrower(Set<String> roles, String principalEmail, UUID sub) {
+        if (roles == null || !roles.contains(Role.BORROWER.authority())) {
+            return;
+        }
+        if (!currentUser.emailVerified()) {
+            return;
+        }
+        if (principalEmail == null || principalEmail.isBlank()) {
+            return;
+        }
+        borrowerUserLinker.linkByVerifiedEmail(principalEmail, sub);
     }
 
     /** First-letter-of-each-word, up to 3, uppercase. */

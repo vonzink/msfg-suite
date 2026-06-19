@@ -103,4 +103,141 @@ class BorrowerControllerIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data.length()").value(1))
                 .andExpect(jsonPath("$.data[0].primary").value(true));   // remaining borrower promoted
     }
+
+    // ── link-user endpoint (T5b) ─────────────────────────────────────────────
+
+    private RequestPostProcessor processor() {
+        return jwt().jwt(j -> j.subject(UUID.randomUUID().toString()).claim("org_id", DEFAULT_ORG))
+                   .authorities(new SimpleGrantedAuthority("ROLE_PROCESSOR"));
+    }
+
+    @Test
+    void staffSetsUserIdLink() throws Exception {
+        String loanId = createLoan();
+        String borrowerId = addBorrower(loanId, "Jane", "Doe", false);
+        String userId = UUID.randomUUID().toString();
+
+        mvc.perform(post("/api/loans/{l}/borrowers/{b}/link-user", loanId, borrowerId)
+                        .with(processor())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\":\"%s\"}".formatted(userId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.userId").value(userId));
+
+        // read-back confirms persistence
+        mvc.perform(get("/api/loans/{l}/borrowers", loanId).with(lo()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].userId").value(userId));
+    }
+
+    @Test
+    void staffOverridesExistingUserId() throws Exception {
+        String loanId = createLoan();
+        String borrowerId = addBorrower(loanId, "John", "Smith", false);
+        String firstUserId = UUID.randomUUID().toString();
+        String secondUserId = UUID.randomUUID().toString();
+
+        // set initial link
+        mvc.perform(post("/api/loans/{l}/borrowers/{b}/link-user", loanId, borrowerId)
+                        .with(processor())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\":\"%s\"}".formatted(firstUserId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.userId").value(firstUserId));
+
+        // override with second userId
+        mvc.perform(post("/api/loans/{l}/borrowers/{b}/link-user", loanId, borrowerId)
+                        .with(processor())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\":\"%s\"}".formatted(secondUserId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.userId").value(secondUserId));
+    }
+
+    @Test
+    void borrowerRoleDenied403() throws Exception {
+        String loanId = createLoan();
+        String borrowerId = addBorrower(loanId, "Bob", "Borrower", false);
+        String userId = UUID.randomUUID().toString();
+
+        // Phase F T6: BORROWER is denied at the SecurityConfig filter layer (link-user is not on the
+        // borrower/agent read allowlist), so the 403 arrives BEFORE the controller. The ApiError
+        // envelope is now rendered there by ApiErrorAccessDeniedHandler — same shape as controller 403s.
+        mvc.perform(post("/api/loans/{l}/borrowers/{b}/link-user", loanId, borrowerId)
+                        .with(jwt().jwt(j -> j.subject(UUID.randomUUID().toString()).claim("org_id", DEFAULT_ORG))
+                                .authorities(new SimpleGrantedAuthority("ROLE_BORROWER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\":\"%s\"}".formatted(userId)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    }
+
+    @Test
+    void realEstateAgentRoleDenied403() throws Exception {
+        String loanId = createLoan();
+        String borrowerId = addBorrower(loanId, "Bob", "Agent", false);
+        String userId = UUID.randomUUID().toString();
+
+        // Phase F T6: denied at the filter layer (non-allowlisted POST for a party role) — see above.
+        // ApiErrorAccessDeniedHandler renders the envelope on the filter-layer 403.
+        mvc.perform(post("/api/loans/{l}/borrowers/{b}/link-user", loanId, borrowerId)
+                        .with(jwt().jwt(j -> j.subject(UUID.randomUUID().toString()).claim("org_id", DEFAULT_ORG))
+                                .authorities(new SimpleGrantedAuthority("ROLE_REAL_ESTATE_AGENT")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\":\"%s\"}".formatted(userId)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    }
+
+    @Test
+    void platformAdminRoleDenied403() throws Exception {
+        String loanId = createLoan();
+        String borrowerId = addBorrower(loanId, "Bob", "PlatAdmin", false);
+        String userId = UUID.randomUUID().toString();
+
+        // PLATFORM_ADMIN is staff-only-excluded from loan data; denied at the filter layer (T6 catch-all
+        // requires a staff authority for non-allowlisted /api/** paths) — 403 before the controller.
+        // ApiErrorAccessDeniedHandler renders the envelope on the filter-layer 403.
+        mvc.perform(post("/api/loans/{l}/borrowers/{b}/link-user", loanId, borrowerId)
+                        .with(jwt().jwt(j -> j.subject(UUID.randomUUID().toString()).claim("org_id", DEFAULT_ORG))
+                                .authorities(new SimpleGrantedAuthority("ROLE_PLATFORM_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\":\"%s\"}".formatted(userId)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    }
+
+    @Test
+    void crossTenantBorrowerId404() throws Exception {
+        String loanId = createLoan();
+        String userId = UUID.randomUUID().toString();
+        // Use a borrowerId that doesn't exist in DEFAULT_ORG
+        String crossTenantBorrowerId = UUID.randomUUID().toString();
+
+        mvc.perform(post("/api/loans/{l}/borrowers/{b}/link-user", loanId, crossTenantBorrowerId)
+                        .with(processor())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\":\"%s\"}".formatted(userId)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    void borrowerNotOnLoan404() throws Exception {
+        String loan1Id = createLoan();
+        String loan2Id = createLoan();
+        // borrower belongs to loan2, not loan1
+        String borrowerOnLoan2 = addBorrower(loan2Id, "Misplaced", "Borrower", false);
+        String userId = UUID.randomUUID().toString();
+
+        mvc.perform(post("/api/loans/{l}/borrowers/{b}/link-user", loan1Id, borrowerOnLoan2)
+                        .with(processor())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\":\"%s\"}".formatted(userId)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false));
+    }
 }

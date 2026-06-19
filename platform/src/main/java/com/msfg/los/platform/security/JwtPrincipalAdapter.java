@@ -34,6 +34,7 @@ public class JwtPrincipalAdapter implements PrincipalPort {
     static final String CLAIM_GIVEN_NAME = "given_name";
     static final String CLAIM_FAMILY_NAME = "family_name";
     static final String CLAIM_ORG_ID = "org_id";
+    static final String CLAIM_EMAIL_VERIFIED = "email_verified";
 
     @Override
     public Optional<String> id() {
@@ -77,6 +78,25 @@ public class JwtPrincipalAdapter implements PrincipalPort {
         } catch (IllegalArgumentException ex) {
             return Optional.empty();
         }
+    }
+
+    @Override
+    public boolean emailVerified() {
+        Optional<Jwt> token = token();
+        if (token.isEmpty()) {
+            return false;
+        }
+        // Fail-closed: only an explicit boolean `true` (or the string "true") counts as verified.
+        // Absent / false / any other value → false. OIDC permits the claim as a JSON boolean; some
+        // IdPs stringify it, so accept both shapes but nothing looser.
+        Object claim = token.get().getClaim(CLAIM_EMAIL_VERIFIED);
+        if (claim instanceof Boolean b) {
+            return b;
+        }
+        if (claim instanceof String s) {
+            return "true".equalsIgnoreCase(s.trim());
+        }
+        return false;
     }
 
     @Override

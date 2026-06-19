@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.msfg.los.loan.web.dto.LoanSearchHit;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -133,6 +134,34 @@ public class LoanService {
             spec = spec.and(LoanSpecifications.idIn(ids));
         }
 
+        Pageable pageable = PageRequest.of(page, size, sort == null ? PipelineSort.DEFAULT : sort);
+        Page<Loan> result = loans.findAll(spec, pageable);
+        var names = resolver.primaryBorrowerNamesByLoanIds(result.map(Loan::getId).getContent());
+        return result.map(l -> LoanListItemResponse.from(l, names.get(l.getId())));
+    }
+
+    /**
+     * Pipeline list scoped to an explicit set of loan ids (Phase F T7). Used by {@code /me/loans}
+     * for BORROWER and REAL_ESTATE_AGENT callers whose linked loan-ids are resolved by the
+     * parties/loan-agent services before this call.
+     *
+     * <p>Security: an empty id collection short-circuits to an empty page — NEVER falls through to
+     * all loans. The id set is tenant-filtered twice: the resolvers' queries are already
+     * {@code @TenantId}-filtered, and the pipeline query is also tenant-scoped by Hibernate, so a
+     * cross-tenant id (impossible in practice) would produce zero results.
+     *
+     * @param loanIds explicit set of loan ids to return (empty → empty page)
+     * @param sort    resolved sort (default = newest-first; see {@link PipelineSort})
+     * @param page    zero-based page index
+     * @param size    page size
+     */
+    @Transactional(readOnly = true)
+    public Page<LoanListItemResponse> pipelineByIds(Collection<UUID> loanIds, Sort sort, int page, int size) {
+        if (loanIds == null || loanIds.isEmpty()) {
+            return Page.empty(PageRequest.of(page, size));
+        }
+        Specification<Loan> spec = LoanSpecifications.notDeleted()
+                .and(LoanSpecifications.idIn(Set.copyOf(loanIds)));
         Pageable pageable = PageRequest.of(page, size, sort == null ? PipelineSort.DEFAULT : sort);
         Page<Loan> result = loans.findAll(spec, pageable);
         var names = resolver.primaryBorrowerNamesByLoanIds(result.map(Loan::getId).getContent());
