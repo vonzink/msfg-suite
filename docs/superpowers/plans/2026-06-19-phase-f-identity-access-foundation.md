@@ -78,17 +78,20 @@ allowed dependency directions before T4/T5; confirm the pool's exact group strin
 | **T3** | `LoanAgent` entity/repo/service (loan-core): `isAgentOnLoan`, `loanIdsForAgent` — explicit `org_id` predicate | T2 | match-only true; two-org no cross-match; org-scoped load | green; org-scoped |
 | **T4** | `LoanLinkageResolver` port (loan-core, UUID-only sig) + `parties` adapter + `BorrowerParty.userId` mapping/queries | T2 | same-org match only; diff-org/null → none; ArchUnit passes | no loan-core→parties import; green |
 | **T5** | Borrower link materialization (**verified-email auto-link + staff override**) via `BorrowerUserLinker` seam; add new roles to `ROLE_PRIORITY` (lowest) | T1,T4 | email_verified=false→no stamp; 0-match→none; 1-match→stamp; >1→none; pre-existing→unchanged; cross-org→unchanged; **takeover (unverified/attacker email)→denied**; staff assign sets link; borrower/agent cannot assign (403) | `/me` 200 + role; staff unchanged; identity does not import parties |
-| **T6** | Access model: `SecurityConfig` deny-by-default borrower/agent **read allowlist**; `assertCanAccess` read-predicate + new `assertCanModify`; LO branch gated on `ROLE_LO`; exhaustive branch | T3,T4 | borrower/agent 403 on writes, reveal-ssn, income, financials, declarations; allowed reads 200 only when linked; borrower `sub==loanOfficerId` still denied write; PLATFORM_ADMIN denied; staff/LO regression | `RoleAccessIT` extended; prior cases green |
+| **T6** | Access model: `SecurityConfig` deny-by-default borrower/agent **read allowlist**; `assertCanAccess` read-predicate + new `assertCanModify`; LO branch gated on `ROLE_LO`; exhaustive branch | T3,T4 | borrower/agent 403 on all writes + reveal-ssn; agent 403 on income/financials/declarations; allowed reads 200 only when linked; borrower `sub==loanOfficerId` still denied write; PLATFORM_ADMIN denied; staff/LO regression | `RoleAccessIT` extended; prior cases green |
 | **T7** | Role-aware `/me/loans`: additive pipeline overload `notDeleted().and(idIn(linkedIds))` (does NOT compose `callerScope`); branch org-wide→LO→borrower→agent→empty | T3,T4 | borrower/agent see only their ids; **empty set→zero loans**; soft-deleted absent; cross-org id omitted; pagination; staff/LO unchanged (`MeIT`) | additive; `MeResponse` shape unchanged |
 | **T8** | Agent staff-assign endpoint (`POST /api/loans/{id}/agents`, staff-gated) + **NPI-free** agent read surface | T3 | staff assigns; agent sees assigned summary/status only; agent denied SSN/income/financials/docs (403); agent cannot assign; non-assigned agent 404 | green; agent ceiling enforced |
 | **T9** | Contract pin + CORS: `@Operation(operationId=…)` on LoanController + MeController; add `app.msfgco.com`+`los.msfgco.com` to `los.cors.allowed-origins` | — | operationIds stable (`listLoans`,`getMyLoans`,…); both origins echo, non-listed don't, no wildcard; per-profile | `OpenApiDocsIT`+`CorsIT` green |
-| **T10** | Security E2E ITs (IDOR + cross-tenant + NPI ceiling); seed links via JDBC | T5,T6,T7,T8 | linked 200; unlinked 403 envelope; `/me/loans` scoped; **cross-tenant 404 + omitted**; borrower can't read co-borrower SSN/income; agent can't read any NPI; staff/LO/PLATFORM_ADMIN regression | flat error envelope asserted; **full build green** |
+| **T11** | Borrower **own-data** read: per-borrower self-scoping (`assertBorrowerSelfAccess`) on income, assets/liabilities, declarations/demographics GETs; add to borrower allowlist | T4,T6 | borrower reads **own** income/assets/declarations (200); borrower denied **co-borrower** rows (403/omitted); agent denied all (403); staff unchanged | own-`borrowerId` only; green |
+| **T10** | Security E2E ITs (IDOR + cross-tenant + NPI ceiling); seed links via JDBC | T5,T6,T7,T8,T11 | linked 200; unlinked 403 envelope; `/me/loans` scoped; **cross-tenant 404 + omitted**; borrower can't read co-borrower SSN/income; agent can't read any NPI; staff/LO/PLATFORM_ADMIN regression | flat error envelope asserted; **full build green** |
 
 ## Borrower read surface (Phase F scope)
 
-Loan **summary** (may show co-borrower *names* — acceptable on a joint app), **status timeline**, and the
-borrower's **own/visible documents + conditions**. Reading own income/asset/declaration *detail* is a
-later additive whitelist extension (deferred). **Never** co-borrower SSN/financial NPI.
+Loan **summary** (may show co-borrower *names* — acceptable on a joint app), **status timeline**, the
+borrower's **own/visible documents + conditions**, AND the borrower's **own income, assets/liabilities,
+and declarations/demographics** — scoped to *their own* `borrowerId` only (per-borrower self-scoping; see
+**T11**). `reveal-ssn` (audited full SSN) stays **staff-only**; borrowers see only their masked SSN in the
+summary. **Never** co-borrower SSN/financial NPI.
 
 ## Risks (carried from the review)
 
