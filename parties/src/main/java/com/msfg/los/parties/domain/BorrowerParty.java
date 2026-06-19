@@ -56,6 +56,10 @@ public class BorrowerParty extends TenantScopedEntity {
 
     private UUID joinedToBorrowerId;
 
+    /** Cross-service identity (Cognito sub). {@code NULL} for co-borrowers without an account. */
+    @Column(name = "user_id")
+    private UUID userId;
+
     private String homePhone;
 
     private String cellPhone;
