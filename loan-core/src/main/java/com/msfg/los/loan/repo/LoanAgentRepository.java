@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -29,4 +30,18 @@ public interface LoanAgentRepository extends JpaRepository<LoanAgent, UUID> {
      */
     @Query("select a.loanId from LoanAgent a where a.userId = :userId")
     List<UUID> findLoanIdsByUserId(@Param("userId") UUID userId);
+
+    // ── write-side additions (T8) ────────────────────────────────────────────
+
+    /** Ordered roster for a loan; used by staff list + ordinal derivation. */
+    List<LoanAgent> findByLoanIdOrderByOrdinalAscIdAsc(UUID loanId);
+
+    /** Highest-ordinal row for a loan — used to compute max+1 for new assignments. */
+    Optional<LoanAgent> findTopByLoanIdOrderByOrdinalDesc(UUID loanId);
+
+    /**
+     * Tenant-safe load by primary key — the predicate on {@code orgId} ensures the
+     * {@code @TenantId} filter is included so find-by-PK cannot leak across tenants.
+     */
+    Optional<LoanAgent> findByIdAndOrgId(UUID id, UUID orgId);
 }
