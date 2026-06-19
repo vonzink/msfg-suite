@@ -13,6 +13,7 @@ import com.msfg.los.platform.security.CurrentUser;
 import com.msfg.los.platform.security.Role;
 import com.msfg.los.platform.web.ApiResponse;
 import com.msfg.los.platform.web.PagedResponse;
+import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -58,12 +59,14 @@ public class MeController {
         this.loanAgentService = loanAgentService;
     }
 
+    @Operation(operationId = "getMe")
     @GetMapping
     public ApiResponse<MeResponse> me() {
         UserAccount u = userAccounts.resolveOrCreate();
         return ApiResponse.ok(MeResponse.from(u, new ArrayList<>(currentUser.roles())));
     }
 
+    @Operation(operationId = "getMyLoans")
     @GetMapping("/loans")
     public ApiResponse<PagedResponse<LoanListItemResponse>> myLoans(
             @RequestParam(defaultValue = "0") int page,

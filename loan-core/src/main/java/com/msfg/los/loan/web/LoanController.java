@@ -11,6 +11,7 @@ import com.msfg.los.loan.web.dto.*;
 import com.msfg.los.platform.security.CurrentUser;
 import com.msfg.los.platform.web.ApiResponse;
 import com.msfg.los.platform.web.PagedResponse;
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
@@ -38,6 +39,7 @@ public class LoanController {
         this.lifecycle = lifecycle;
     }
 
+    @Operation(operationId = "createLoan")
     @PostMapping
     public ResponseEntity<ApiResponse<LoanSummaryResponse>> create(@Valid @RequestBody CreateLoanRequest req) {
         Loan loan = service.create(req);
@@ -62,6 +64,7 @@ public class LoanController {
      * @param amountMax   primary loan amount <= this.
      * @param sort        {@code field,dir} — whitelist createdAt|statusChangedAt|amount, dir asc|desc.
      */
+    @Operation(operationId = "listLoans")
     @GetMapping
     public ApiResponse<PagedResponse<LoanListItemResponse>> pipeline(
             @RequestParam(required = false) List<LoanStatus> status,
@@ -86,6 +89,7 @@ public class LoanController {
         return ApiResponse.ok(PagedResponse.from(result));
     }
 
+    @Operation(operationId = "getLoan")
     @GetMapping("/{id}")
     public ApiResponse<LoanSummaryResponse> get(@PathVariable UUID id) {
         Loan loan = service.get(id);
@@ -94,6 +98,7 @@ public class LoanController {
     }
 
     /** Lookup by human loan number (Phase 2 T3). Org-scoped + not-deleted; access-guarded. */
+    @Operation(operationId = "getLoanByNumber")
     @GetMapping("/number/{loanNumber}")
     public ApiResponse<LoanSummaryResponse> getByNumber(@PathVariable String loanNumber) {
         Loan loan = service.getByNumber(loanNumber);
@@ -102,6 +107,7 @@ public class LoanController {
     }
 
     /** Typeahead search (Phase 2 T3): q (min len 2 else empty), limit default 10, cap 50. Caller-scoped. */
+    @Operation(operationId = "searchLoans")
     @GetMapping("/search")
     public ApiResponse<List<LoanSearchHit>> search(
             @RequestParam(required = false) String q,
@@ -114,6 +120,7 @@ public class LoanController {
     }
 
     /** Soft-delete (Phase 2 T3). Gated to LO/MANAGER/ADMIN in SecurityConfig; LO must own the loan. */
+    @Operation(operationId = "deleteLoan")
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@PathVariable UUID id) {
         Loan loan = service.get(id);     // 404 if missing or already soft-deleted
@@ -122,12 +129,14 @@ public class LoanController {
         return ApiResponse.ok(null);
     }
 
+    @Operation(operationId = "updateLoan")
     @PatchMapping("/{id}")
     public ApiResponse<LoanSummaryResponse> update(@PathVariable UUID id, @Valid @RequestBody UpdateLoanRequest req) {
         accessGuard.assertCanModify(service.get(id));   // write gate
         return ApiResponse.ok(LoanSummaryResponse.from(service.update(id, req)));
     }
 
+    @Operation(operationId = "getLoanStatusTransitions")
     @GetMapping("/{id}/status/transitions")
     public ApiResponse<TransitionsResponse> transitions(@PathVariable UUID id) {
         Loan loan = service.get(id);
@@ -136,6 +145,7 @@ public class LoanController {
             lifecycle.allowedTransitions(loan.getStatus(), currentUser.roles())));
     }
 
+    @Operation(operationId = "transitionLoanStatus")
     @PostMapping("/{id}/status")
     public ApiResponse<LoanSummaryResponse> transition(@PathVariable UUID id, @Valid @RequestBody TransitionRequest req) {
         Loan loan = service.get(id);

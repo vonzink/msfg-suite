@@ -8,6 +8,7 @@ import com.msfg.los.parties.web.dto.RevealSsnRequest;
 import com.msfg.los.parties.web.dto.RevealSsnResponse;
 import com.msfg.los.parties.web.dto.UpdateBorrowerRequest;
 import com.msfg.los.platform.web.ApiResponse;
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -66,6 +67,7 @@ public class BorrowerController {
      * (owner), PROCESSOR, UNDERWRITER, CLOSER, MANAGER, and ADMIN. BORROWER, REAL_ESTATE_AGENT,
      * and PLATFORM_ADMIN receive 403 via {@link com.msfg.los.loan.service.LoanAccessGuard}.
      */
+    @Operation(operationId = "linkBorrowerUser")
     @PostMapping("/{borrowerId}/link-user")
     public ApiResponse<BorrowerResponse> linkUser(
             @PathVariable UUID loanId,

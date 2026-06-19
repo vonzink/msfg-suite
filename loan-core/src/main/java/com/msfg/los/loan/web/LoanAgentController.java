@@ -6,6 +6,7 @@ import com.msfg.los.loan.service.LoanService;
 import com.msfg.los.loan.web.dto.AssignAgentRequest;
 import com.msfg.los.loan.web.dto.LoanAgentResponse;
 import com.msfg.los.platform.web.ApiResponse;
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -45,6 +46,7 @@ public class LoanAgentController {
     }
 
     /** Assign a user as an agent on the loan. Duplicate (org, loan, user) → 409. */
+    @Operation(operationId = "assignLoanAgent")
     @PostMapping
     public ResponseEntity<ApiResponse<LoanAgentResponse>> assign(
             @PathVariable UUID loanId,
@@ -57,6 +59,7 @@ public class LoanAgentController {
     }
 
     /** List the loan's agent roster (staff only). */
+    @Operation(operationId = "listLoanAgents")
     @GetMapping
     public ApiResponse<List<LoanAgentResponse>> list(@PathVariable UUID loanId) {
         accessGuard.assertCanAccess(loanService.get(loanId));
@@ -65,6 +68,7 @@ public class LoanAgentController {
     }
 
     /** Unassign an agent from the loan (204). */
+    @Operation(operationId = "unassignLoanAgent")
     @DeleteMapping("/{agentId}")
     public ResponseEntity<Void> remove(
             @PathVariable UUID loanId,

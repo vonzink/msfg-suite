@@ -20,9 +20,9 @@ spring:
           issuer-uri: ${COGNITO_ISSUER}
 los:
   cors:
-    # Set the real frontend origin(s) for production here, or via LOS_CORS_ALLOWED_ORIGINS env var.
-    # Example: los.cors.allowed-origins: https://app.msfgco.com
-    # allowed-origins: https://app.msfgco.com
+    # Frontend origins for production. Override at runtime via the LOS_CORS_ALLOWED_ORIGINS env var
+    # (comma-separated list). allowCredentials=false; exact-origin allowlist; /api/** scope.
+    allowed-origins: "https://app.msfgco.com,https://los.msfgco.com"
   security:
     # MUST be true in production once the runtime datasource points at the non-owner app_user role:
     # a non-RLS (owner/superuser) deployment then fails startup loudly instead of running with the
