@@ -37,9 +37,19 @@ public class DemographicsService {
             throw new NotFoundException("Borrower", borrowerId);
     }
 
+    /**
+     * Read gate (T11): staff/owning-LO OR the borrower reading their OWN row. The PUT-upsert keeps
+     * the staff-only {@link #assertBorrowerInLoan}.
+     */
+    private void assertBorrowerSelfReadable(UUID loanId, UUID borrowerId) {
+        accessGuard.assertBorrowerSelfReadable(loanService.get(loanId), borrowerId);
+        if (!borrowerService.isBorrowerInLoan(loanId, borrowerId))
+            throw new NotFoundException("Borrower", borrowerId);
+    }
+
     @Transactional(readOnly = true)
     public BorrowerDemographics get(UUID loanId, UUID borrowerId) {
-        assertBorrowerInLoan(loanId, borrowerId);
+        assertBorrowerSelfReadable(loanId, borrowerId);
         return repo.findByBorrowerId(borrowerId).orElse(null);
     }
 

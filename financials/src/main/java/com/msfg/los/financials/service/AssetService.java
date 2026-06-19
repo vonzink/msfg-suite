@@ -42,6 +42,16 @@ public class AssetService {
             throw new NotFoundException("Borrower", borrowerId);
     }
 
+    /**
+     * Read gate (T11): staff/owning-LO OR the borrower reading their OWN row. Writes keep the
+     * staff-only {@link #assertBorrowerInLoan}.
+     */
+    private void assertBorrowerSelfReadable(UUID loanId, UUID borrowerId) {
+        accessGuard.assertBorrowerSelfReadable(loanService.get(loanId), borrowerId);
+        if (!borrowerService.isBorrowerInLoan(loanId, borrowerId))
+            throw new NotFoundException("Borrower", borrowerId);
+    }
+
     // max+1, not count — count reuses ordinals after a delete and collides
     private int nextOrdinal(UUID borrowerId) {
         return assets.findTopByBorrowerIdOrderByOrdinalDesc(borrowerId)
@@ -72,7 +82,7 @@ public class AssetService {
 
     @Transactional(readOnly = true)
     public List<Asset> list(UUID loanId, UUID borrowerId) {
-        assertBorrowerInLoan(loanId, borrowerId);
+        assertBorrowerSelfReadable(loanId, borrowerId);
         return assets.findByBorrowerIdOrderByOrdinalAscIdAsc(borrowerId);
     }
 

@@ -285,17 +285,23 @@ class RoleAccessIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void linkedBorrowerCannotReadIncomeFinancialsDeclarations() throws Exception {
+    void linkedBorrowerCannotReadLoanLevelAggregatesOrBorrowerList() throws Exception {
         String id = createLoanOwnedByLoA();
         String borrowerSub = UUID.randomUUID().toString();
-        String borrowerId = addLinkedBorrower(id, borrowerSub);
+        addLinkedBorrower(id, borrowerSub);
         RequestPostProcessor who = as(borrowerSub, "ROLE_BORROWER");
+        // Loan-level aggregates + verifications stay staff-only (T11 out-of-scope) → 403 at the filter.
         mvc.perform(get("/api/loans/{id}/income/summary", id).with(who))
                 .andExpect(status().isForbidden());
         mvc.perform(get("/api/loans/{id}/assets/summary", id).with(who))
                 .andExpect(status().isForbidden());
-        mvc.perform(get("/api/loans/{id}/borrowers/{bid}/declarations", id, borrowerId).with(who))
+        mvc.perform(get("/api/loans/{id}/liabilities/summary", id).with(who))
                 .andExpect(status().isForbidden());
+        mvc.perform(get("/api/loans/{id}/income/verifications", id).with(who))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/loans/{id}/assets/verifications", id).with(who))
+                .andExpect(status().isForbidden());
+        // The borrower roster (loan-level) is not own-data → 403.
         mvc.perform(get("/api/loans/{id}/borrowers", id).with(who))
                 .andExpect(status().isForbidden());
     }

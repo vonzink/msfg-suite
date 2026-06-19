@@ -28,6 +28,10 @@ public class SecurityConfig {
     private static final String[] STAFF_AND_PARTY =
             { "LO", "PROCESSOR", "UNDERWRITER", "CLOSER", "MANAGER", "ADMIN",
               "BORROWER", "REAL_ESTATE_AGENT" };
+    // Staff PLUS the BORROWER role only (NO agent) — the T11 per-borrower own-data read allowlist.
+    // Agent is excluded at the filter (defense-in-depth); the guard denies agent regardless.
+    private static final String[] STAFF_AND_BORROWER =
+            { "LO", "PROCESSOR", "UNDERWRITER", "CLOSER", "MANAGER", "ADMIN", "BORROWER" };
 
     private final TenantContextFilter tenantFilter;
     private final ObjectMapper objectMapper;
@@ -96,6 +100,20 @@ public class SecurityConfig {
                         HttpMethod.GET, "/api/loans/[0-9a-fA-F-]{36}(\\?.*)?")).hasAnyRole(STAFF_AND_PARTY)
                 .requestMatchers(RegexRequestMatcher.regexMatcher(
                         HttpMethod.GET, "/api/loans/[0-9a-fA-F-]{36}/status/transitions(\\?.*)?")).hasAnyRole(STAFF_AND_PARTY)
+                // ── Phase F T11 — per-borrower own-data GET reads (BORROWER, not agent) ──────────
+                // The borrower's OWN per-borrower 1003 sections. UUID-constrained on BOTH the loan id
+                // and the borrower id; the section is one of the six in-scope read controllers. The
+                // borrower-IS-this-row check is enforced at the service via
+                // LoanAccessGuard.assertBorrowerSelfReadable. GET only — writes (POST/PATCH/DELETE) on
+                // these same paths are NOT matched here and fall through to the staff-only catch-all
+                // (party token → 403). Loan-level aggregates (/income/summary, /assets/summary,
+                // /liabilities/summary, /income/verifications, /assets/verifications) are deliberately
+                // EXCLUDED: the alternation lists only the six base sections, anchored by (\?.*)? — a
+                // trailing /summary or /verifications never matches → staff-only catch-all.
+                .requestMatchers(RegexRequestMatcher.regexMatcher(HttpMethod.GET,
+                        "/api/loans/[0-9a-fA-F-]{36}/borrowers/[0-9a-fA-F-]{36}/"
+                        + "(income|employments|assets|liabilities|declarations|demographics)(\\?.*)?"))
+                    .hasAnyRole(STAFF_AND_BORROWER)
                 // Catch-all: every other API path is staff-only. Parties never reach writes or any
                 // non-allowlisted read (they are not in this authority set → 403 at the filter).
                 .requestMatchers("/api/**").hasAnyRole(STAFF)

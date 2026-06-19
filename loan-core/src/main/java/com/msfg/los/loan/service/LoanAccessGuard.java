@@ -105,6 +105,29 @@ public class LoanAccessGuard {
     }
 
     /**
+     * Per-borrower own-data READ predicate (T11). Passes for staff-or-owning-LO (unchanged), OR a
+     * {@code ROLE_BORROWER} whose sub IS the {@code borrowerId} row being read
+     * ({@code linkageResolver.isBorrowerSelf}). Throws otherwise.
+     *
+     * <p>Strictly narrower than {@link #assertReadable(Loan)} on the party side: it admits a borrower
+     * ONLY for their OWN borrower row — never a co-borrower's. A {@code REAL_ESTATE_AGENT} never
+     * passes (no role branch), and PLATFORM_ADMIN never passes (excluded from {@code isStaffOrOwningLo}).
+     *
+     * <p>Wired ONLY to the per-borrower GET reads (income/employments/assets/liabilities/declarations/
+     * demographics). Loan-level aggregates and all writes keep the staff-only {@link #assertCanAccess(Loan)}.
+     */
+    public void assertBorrowerSelfReadable(Loan loan, UUID borrowerId) {
+        if (isStaffOrOwningLo(loan)) return;
+        UUID me = currentSubject();
+        if (me != null
+                && currentUser.roles().contains(Role.BORROWER.authority())
+                && loanLinkageResolver.isBorrowerSelf(borrowerId, me)) {
+            return;
+        }
+        throw new ForbiddenException("No access to loan " + loan.getLoanNumber());
+    }
+
+    /**
      * Staff-or-owning-LO. Org-wide-view roles pass. The owning-LO branch requires BOTH the
      * {@code ROLE_LO} authority AND {@code sub == loan.loanOfficerId} — a borrower/agent whose sub
      * happened to equal a {@code loanOfficerId} must NOT be treated as the LO.

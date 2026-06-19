@@ -30,6 +30,17 @@ public interface BorrowerRepository extends JpaRepository<BorrowerParty, UUID> {
     boolean existsByLoanIdAndUserId(UUID loanId, UUID userId);
 
     /**
+     * Returns {@code true} when the borrower row {@code id} in the current tenant is linked to
+     * {@code userId} — i.e. the authenticated user IS that exact borrower. Tenant-filtered by
+     * Hibernate {@code @TenantId}.
+     *
+     * <p>Drives {@link com.msfg.los.parties.service.LoanLinkageAdapter#isBorrowerSelf} (T11
+     * per-borrower own-data reads). Matches the EXACT row, so a borrower can never read a
+     * co-borrower's data.
+     */
+    boolean existsByIdAndUserId(UUID id, UUID userId);
+
+    /**
      * Returns the distinct loan-ids where the given user appears as a borrower in the current
      * tenant. Tenant-filtered by Hibernate {@code @TenantId}.
      *

@@ -14,6 +14,7 @@ import java.util.UUID;
  * <ul>
  *   <li>T6 access guard — {@link #isBorrowerOnLoan} determines borrower self-scope</li>
  *   <li>T7 {@code /me/loans} — {@link #loanIdsForBorrower} scopes the pipeline</li>
+ *   <li>T11 access guard — {@link #isBorrowerSelf} gates per-borrower own-data reads</li>
  * </ul>
  */
 public interface LoanLinkageResolver {
@@ -34,4 +35,17 @@ public interface LoanLinkageResolver {
      * <p>A {@code null} {@code userId} always returns an empty list.
      */
     List<UUID> loanIdsForBorrower(UUID userId);
+
+    /**
+     * Returns {@code true} when a borrower row {@code borrowerId} in the current tenant is linked to
+     * {@code userId} (a Cognito sub) — i.e. the authenticated user IS that specific borrower.
+     *
+     * <p>Unlike {@link #isBorrowerOnLoan} (any borrower on a loan), this matches the EXACT borrower
+     * row: a borrower must never read a co-borrower's per-borrower 1003 data. Drives the T11 guard
+     * {@code LoanAccessGuard.assertBorrowerSelfReadable}.
+     *
+     * <p>A {@code null} {@code userId} always returns {@code false} — co-borrowers without a linked
+     * account must never match an authenticated user.
+     */
+    boolean isBorrowerSelf(UUID borrowerId, UUID userId);
 }

@@ -48,13 +48,28 @@ class LoanAccessGuardTest {
      * only subjects treated as linked to {@link #LOAN_ID}.
      */
     private LoanAccessGuard guard(CurrentUser u, UUID borrowerLinkedSub, UUID agentLinkedSub) {
+        return guard(u, borrowerLinkedSub, agentLinkedSub, null, null);
+    }
+
+    /**
+     * Builds a guard. In addition to the loan-level linkage stubs, {@code selfBorrowerId}/
+     * {@code selfSub} (if both non-null) define the ONE {@code (borrowerId, userId)} pair that
+     * {@link LoanLinkageResolver#isBorrowerSelf} reports as a self-match — driving
+     * {@code assertBorrowerSelfReadable}.
+     */
+    private LoanAccessGuard guard(CurrentUser u, UUID borrowerLinkedSub, UUID agentLinkedSub,
+                                  UUID selfBorrowerId, UUID selfSub) {
         LoanLinkageResolver borrowerLinker = new LoanLinkageResolver() {
             @Override public boolean isBorrowerOnLoan(UUID loanId, UUID userId) {
                 return borrowerLinkedSub != null && borrowerLinkedSub.equals(userId) && LOAN_ID.equals(loanId);
             }
             @Override public List<UUID> loanIdsForBorrower(UUID userId) { return List.of(); }
+            @Override public boolean isBorrowerSelf(UUID borrowerId, UUID userId) {
+                return selfBorrowerId != null && selfSub != null
+                        && selfBorrowerId.equals(borrowerId) && selfSub.equals(userId);
+            }
         };
-        LoanAgentService agentService = new LoanAgentService(null) {
+        LoanAgentService agentService = new LoanAgentService(null, null, null) {
             @Override public boolean isAgentOnLoan(UUID loanId, UUID userId) {
                 return agentLinkedSub != null && agentLinkedSub.equals(userId) && LOAN_ID.equals(loanId);
             }
@@ -158,5 +173,48 @@ class LoanAccessGuardTest {
     @Test void platformAdminNotReadable() {
         assertThatThrownBy(() -> guard(userWith(UUID.randomUUID().toString(), Role.PLATFORM_ADMIN.authority()))
                 .assertReadable(loanWithId())).isInstanceOf(ForbiddenException.class);
+    }
+
+    // ── assertBorrowerSelfReadable (per-borrower own-data read; T11) ───────────────
+    // Passes for staff-or-owning-LO (unchanged), OR a ROLE_BORROWER whose sub is the SAME borrower
+    // row being read. A co-borrower's borrowerId, an agent, and PLATFORM_ADMIN never pass.
+
+    private static final UUID BORROWER_ID = UUID.randomUUID();
+
+    @Test void selfReadableForOwningLo() {
+        assertThatCode(() -> guard(userWith(OWNER.toString(), Role.LO.authority()))
+                .assertBorrowerSelfReadable(loanWithId(), BORROWER_ID)).doesNotThrowAnyException();
+    }
+    @Test void selfReadableForOrgWideStaff() {
+        assertThatCode(() -> guard(userWith(UUID.randomUUID().toString(), Role.PROCESSOR.authority()))
+                .assertBorrowerSelfReadable(loanWithId(), BORROWER_ID)).doesNotThrowAnyException();
+    }
+    @Test void selfReadableForBorrowerReadingOwnRow() {
+        UUID sub = UUID.randomUUID();
+        assertThatCode(() -> guard(userWith(sub.toString(), Role.BORROWER.authority()), null, null, BORROWER_ID, sub)
+                .assertBorrowerSelfReadable(loanWithId(), BORROWER_ID)).doesNotThrowAnyException();
+    }
+    // A borrower reading a CO-BORROWER's borrowerId is denied — self-match is per borrower row.
+    @Test void selfNotReadableForCoBorrowerRow() {
+        UUID sub = UUID.randomUUID();
+        UUID coBorrowerId = UUID.randomUUID();
+        assertThatThrownBy(() -> guard(userWith(sub.toString(), Role.BORROWER.authority()), null, null, BORROWER_ID, sub)
+                .assertBorrowerSelfReadable(loanWithId(), coBorrowerId)).isInstanceOf(ForbiddenException.class);
+    }
+    // An unlinked / non-self borrower token is denied even on a real borrowerId.
+    @Test void selfNotReadableForUnlinkedBorrower() {
+        UUID sub = UUID.randomUUID();
+        assertThatThrownBy(() -> guard(userWith(sub.toString(), Role.BORROWER.authority()), null, null, null, null)
+                .assertBorrowerSelfReadable(loanWithId(), BORROWER_ID)).isInstanceOf(ForbiddenException.class);
+    }
+    // An agent never reaches per-borrower data, even self-matched on the same id (role gate).
+    @Test void selfNotReadableForAgent() {
+        UUID sub = UUID.randomUUID();
+        assertThatThrownBy(() -> guard(userWith(sub.toString(), Role.REAL_ESTATE_AGENT.authority()), null, sub, BORROWER_ID, sub)
+                .assertBorrowerSelfReadable(loanWithId(), BORROWER_ID)).isInstanceOf(ForbiddenException.class);
+    }
+    @Test void selfNotReadableForPlatformAdmin() {
+        assertThatThrownBy(() -> guard(userWith(UUID.randomUUID().toString(), Role.PLATFORM_ADMIN.authority()))
+                .assertBorrowerSelfReadable(loanWithId(), BORROWER_ID)).isInstanceOf(ForbiddenException.class);
     }
 }

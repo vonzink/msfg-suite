@@ -47,4 +47,16 @@ public class LoanLinkageAdapter implements LoanLinkageResolver {
         if (userId == null) return Collections.emptyList();
         return borrowers.findLoanIdsByUserId(userId);
     }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>A {@code null} {@code userId} returns {@code false} immediately. Matches the EXACT borrower
+     * row so a borrower can never self-match a co-borrower's row.
+     */
+    @Override
+    public boolean isBorrowerSelf(UUID borrowerId, UUID userId) {
+        if (userId == null) return false;
+        return borrowers.existsByIdAndUserId(borrowerId, userId);
+    }
 }
