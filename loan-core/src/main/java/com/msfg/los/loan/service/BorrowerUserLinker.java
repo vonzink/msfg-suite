@@ -42,6 +42,17 @@ public interface BorrowerUserLinker {
      */
     LinkResult linkByVerifiedEmail(String email, UUID userId);
 
+    /**
+     * Stamps {@code user_id = :userId} on the EXACT borrower row {@code borrowerId}, only while it is
+     * still unlinked ({@code user_id IS NULL}). Deterministic counterpart to {@link #linkByVerifiedEmail}
+     * for the case where the caller just created the row (Phase A intake) and knows its id. Idempotent;
+     * a second call (or a race) is a {@link LinkResult#NO_OP}.
+     *
+     * @param borrowerId the borrower row to link; {@code null} never links
+     * @param userId     the Cognito sub to stamp; {@code null} never links
+     */
+    LinkResult linkById(UUID borrowerId, UUID userId);
+
     /** Outcome of a {@link #linkByVerifiedEmail} attempt. */
     enum LinkResult {
         /** Exactly one unlinked match was found and stamped with the user id. */

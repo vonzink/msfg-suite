@@ -203,4 +203,60 @@ class BorrowerUserLinkerIT extends AbstractIntegrationTest {
         assertThat(linker.linkByVerifiedEmail("guard@example.com", null)).isEqualTo(LinkResult.NO_OP);
         assertThat(userIdOf(b)).as("no guard input mutated the row").isNull();
     }
+
+    // ── linkById — deterministic link for known borrower id (Phase A intake) ──
+
+    /**
+     * Happy path: freshly seeded unlinked row → LINKED on first call, NO_OP on second.
+     * Resolution asserted via direct JDBC query (existsByLoanIdAndUserId equivalent).
+     */
+    @Test
+    void linkById_linksUnlinkedRow() {
+        UUID borrowerId = seedBorrower(ORG_A, loanA, 10, "intake@dev.local", null);
+        UUID sub = UUID.fromString("00000000-0000-0000-0000-0000000000b0");
+
+        TenantContextHolder.set(ORG_A);
+        assertThat(linker.linkById(borrowerId, sub))
+                .as("first call stamps the row")
+                .isEqualTo(LinkResult.LINKED);
+        assertThat(userIdOf(borrowerId)).as("user_id written").isEqualTo(sub);
+    }
+
+    @Test
+    void linkById_secondCallIsNoOp() {
+        UUID borrowerId = seedBorrower(ORG_A, loanA, 11, "intake2@dev.local", null);
+        UUID sub = UUID.fromString("00000000-0000-0000-0000-0000000000b0");
+
+        TenantContextHolder.set(ORG_A);
+        linker.linkById(borrowerId, sub);
+        assertThat(linker.linkById(borrowerId, sub))
+                .as("idempotent re-call is NO_OP")
+                .isEqualTo(LinkResult.NO_OP);
+        assertThat(userIdOf(borrowerId)).as("link preserved").isEqualTo(sub);
+    }
+
+    @Test
+    void linkById_nullInputsAreNoOp() {
+        UUID borrowerId = seedBorrower(ORG_A, loanA, 12, "intake3@dev.local", null);
+        TenantContextHolder.set(ORG_A);
+
+        assertThat(linker.linkById(null, UUID.randomUUID())).isEqualTo(LinkResult.NO_OP);
+        assertThat(linker.linkById(borrowerId, null)).isEqualTo(LinkResult.NO_OP);
+        assertThat(userIdOf(borrowerId)).as("guard inputs left row unlinked").isNull();
+    }
+
+    @Test
+    void linkById_resolvedOnLoan_afterLink() {
+        UUID sub = UUID.fromString("00000000-0000-0000-0000-0000000000b0");
+        UUID borrowerId = seedBorrower(ORG_A, loanA, 13, "intake4@dev.local", null);
+
+        TenantContextHolder.set(ORG_A);
+        assertThat(linker.linkById(borrowerId, sub)).isEqualTo(LinkResult.LINKED);
+
+        // Assert borrower is resolvable on the loan via direct JDBC (existsByLoanIdAndUserId equivalent).
+        Boolean found = jdbc.queryForObject(
+                "select exists(select 1 from borrower_party where loan_id = ? and user_id = ?)",
+                Boolean.class, loanA, sub);
+        assertThat(found).as("borrower is on the loan after linkById").isTrue();
+    }
 }
