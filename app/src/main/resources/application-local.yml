@@ -9,7 +9,7 @@ spring:
 los:
   cors:
     # Local dev: accept requests from Vite (5173) and Next.js (3000) dev servers.
-    allowed-origins: "http://localhost:5173,http://localhost:3000"
+    allowed-origins: "http://localhost:5173,http://localhost:3000,http://localhost:3001"
   npi:
     # Local-dev key only (not real NPI). dev/prod must supply LOS_NPI_KEY from the environment.
     key: ${LOS_NPI_KEY:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}

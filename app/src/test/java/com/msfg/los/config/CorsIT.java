@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.hamcrest.Matchers.containsStringIgnoringCase;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -103,5 +104,63 @@ class CorsProductionOriginsIT extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Access-Control-Allow-Origin", "https://app.msfgco.com"))
                 .andExpect(header().doesNotExist("Access-Control-Allow-Credentials"));
+    }
+}
+
+/**
+ * CORS assertions for the local funnel-walk origin (mortgage-app React FE on :3001)
+ * and the dev-identity headers used in local mode.
+ *
+ * <p>The :3001 origin is only configured in the {@code local} profile
+ * ({@code application-local.yml}), so we override it explicitly here. The dev-header
+ * assertion is profile-independent (CorsConfig is global).
+ */
+@TestPropertySource(properties = "los.cors.allowed-origins=http://localhost:3001")
+class CorsLocalFunnelIT extends AbstractIntegrationTest {
+
+    @Autowired
+    MockMvc mvc;
+
+    @Test
+    void preflightFromLocalhost3001IsPermitted() throws Exception {
+        mvc.perform(options("/api/loans")
+                .header("Origin", "http://localhost:3001")
+                .header("Access-Control-Request-Method", "POST"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:3001"));
+    }
+
+    @Test
+    void preflightWithDevSubHeaderIsPermitted() throws Exception {
+        mvc.perform(options("/api/loans")
+                .header("Origin", "http://localhost:3001")
+                .header("Access-Control-Request-Method", "GET")
+                .header("Access-Control-Request-Headers", "X-Dev-Sub"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:3001"))
+                .andExpect(header().string("Access-Control-Allow-Headers",
+                        containsStringIgnoringCase("X-Dev-Sub")));
+    }
+
+    @Test
+    void preflightWithDevRolesHeaderIsPermitted() throws Exception {
+        mvc.perform(options("/api/loans")
+                .header("Origin", "http://localhost:3001")
+                .header("Access-Control-Request-Method", "GET")
+                .header("Access-Control-Request-Headers", "X-Dev-Roles"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Headers",
+                        containsStringIgnoringCase("X-Dev-Roles")));
+    }
+
+    @Test
+    void preflightWithDevOrgHeaderIsPermitted() throws Exception {
+        mvc.perform(options("/api/loans")
+                .header("Origin", "http://localhost:3001")
+                .header("Access-Control-Request-Method", "GET")
+                .header("Access-Control-Request-Headers", "X-Dev-Org"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Headers",
+                        containsStringIgnoringCase("X-Dev-Org")));
     }
 }

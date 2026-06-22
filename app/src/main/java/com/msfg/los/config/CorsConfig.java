@@ -30,7 +30,7 @@ public class CorsConfig {
         // Exact origin allowlist — populated from los.cors.allowed-origins; empty = deny all.
         c.setAllowedOrigins(props.getAllowedOrigins());
         c.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        c.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        c.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Dev-Sub", "X-Dev-Roles", "X-Dev-Org"));
         c.setAllowCredentials(false);
         c.setMaxAge(3600L);
 
