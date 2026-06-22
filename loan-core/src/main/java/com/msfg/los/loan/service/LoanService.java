@@ -24,6 +24,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -70,6 +71,21 @@ public class LoanService {
         loan.setAmortizationType(req.amortizationType());
         loan.setNoteAmount(req.noteAmount());
         return loans.save(loan);
+    }
+
+    /** Idempotency lookup for the funnel hand-off (Phase A). Tenant-scoped, not-deleted. */
+    @Transactional(readOnly = true)
+    public Optional<Loan> findBySourceLeadId(String sourceLeadId) {
+        if (sourceLeadId == null || sourceLeadId.isBlank()) return Optional.empty();
+        return loans.findBySourceLeadIdAndDeletedAtIsNull(sourceLeadId);
+    }
+
+    /** Stamp the upstream lead id on a loan (dirty-checked within the tx). 404 if missing/deleted. */
+    @Transactional
+    public Loan tagSourceLead(UUID loanId, String sourceLeadId) {
+        Loan loan = get(loanId);
+        loan.setSourceLeadId(sourceLeadId);
+        return loan;
     }
 
     @Transactional(readOnly = true)
