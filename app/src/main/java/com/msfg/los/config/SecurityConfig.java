@@ -61,6 +61,11 @@ public class SecurityConfig {
                     .hasAnyRole("ADMIN", "PLATFORM_ADMIN")
                 .requestMatchers("/api/admin/**").hasRole("PLATFORM_ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/loans").hasAnyRole("LO", "MANAGER", "ADMIN")
+                // Borrower funnel hand-off (Phase A4): a signed-in BORROWER (or staff) creates a loan +
+                // primary borrower row in suite. A literal path (NOT a loan-id), so it never matches the
+                // UUID-constrained party allowlist below — it MUST precede the staff-only /api/** catch-all
+                // or a borrower token would 403 there. The borrower→sub link is enforced in IntakeService.
+                .requestMatchers(HttpMethod.POST, "/api/loans/intake").hasAnyRole(STAFF_AND_BORROWER)
                 // Clone a loan ("Copy to new"): LO / PROCESSOR / MANAGER / ADMIN (Phase 2 T7). The
                 // owning-LO access check is enforced in the service via the access guard. MUST precede
                 // the broad /api/** rule — more specific matcher first.

@@ -38,6 +38,27 @@ public class BorrowerService {
     @Transactional
     public BorrowerParty add(UUID loanId, AddBorrowerRequest req) {
         accessGuard.assertCanAccess(loanService.get(loanId));
+        return insert(loanId, req);
+    }
+
+    /**
+     * Privileged intake seam (Phase A4 funnel hand-off): add a borrower WITHOUT the staff
+     * {@code assertCanAccess} loan gate. Mirrors {@code LoanService.create}, which is likewise NOT
+     * loan-access-guarded (you cannot access-guard a loan the caller does not yet own — the borrower
+     * is creating their own loan via the funnel). Authorization for this path lives at the controller
+     * ({@code SecurityConfig} permits BORROWER on {@code POST /api/loans/intake}); the
+     * {@code IntakeService} then links the new row to the caller's sub. Loan existence/tenant scope is
+     * still enforced via {@code loanService.get}. Used ONLY by {@code IntakeService} — not a general
+     * write path. Public {@code add} keeps the staff gate unchanged.
+     */
+    @Transactional
+    public BorrowerParty addAtIntake(UUID loanId, AddBorrowerRequest req) {
+        loanService.get(loanId);   // 404 cross-tenant / missing — no role gate (intake bootstrap)
+        return insert(loanId, req);
+    }
+
+    /** Shared insert mechanics for {@link #add} and {@link #addAtIntake} (ordinal, primary, PII). */
+    private BorrowerParty insert(UUID loanId, AddBorrowerRequest req) {
         long count = borrowers.countByLoanId(loanId);
         BorrowerParty b = new BorrowerParty();
         b.setLoanId(loanId); b.setFirstName(req.firstName()); b.setLastName(req.lastName());
