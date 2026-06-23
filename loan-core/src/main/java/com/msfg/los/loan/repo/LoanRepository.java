@@ -50,6 +50,9 @@ public interface LoanRepository extends JpaRepository<Loan, UUID>, JpaSpecificat
            """)
     List<Loan> searchByLoanNumberLikeForOfficer(@Param("lo") UUID loanOfficerId, @Param("q") String q);
 
+    // Idempotency lookup — funnel hand-off (Phase A / POST /api/loans/intake).
+    java.util.Optional<Loan> findBySourceLeadIdAndDeletedAtIsNull(String sourceLeadId);
+
     // Fetch a bounded set of loans by id, not-deleted, scoped — for the borrower-name search leg.
     @Query("""
            select l from Loan l

@@ -46,4 +46,15 @@ public class BorrowerUserLinkAdapter implements BorrowerUserLinker {
         int updated = borrowers.linkUserIfUnlinked(candidates.get(0), userId);
         return updated == 1 ? LinkResult.LINKED : LinkResult.NO_OP;
     }
+
+    /** {@inheritDoc} */
+    @Override
+    @Transactional
+    public LinkResult linkById(UUID borrowerId, UUID userId) {
+        if (borrowerId == null || userId == null) {
+            return LinkResult.NO_OP;
+        }
+        int updated = borrowers.linkUserIfUnlinked(borrowerId, userId);
+        return updated == 1 ? LinkResult.LINKED : LinkResult.NO_OP;
+    }
 }

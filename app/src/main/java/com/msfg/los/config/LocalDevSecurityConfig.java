@@ -59,25 +59,62 @@ public class LocalDevSecurityConfig {
         return http.build();
     }
 
-    /** Injects a fixed dev ADMIN JwtAuthenticationToken so CurrentUser + access guards work locally. */
+    /**
+     * Injects a dev principal so CurrentUser + access guards work locally WITHOUT Cognito.
+     * Honors optional dev headers so we can act as a borrower/agent/LO for cross-system testing:
+     *   X-Dev-Sub   : UUID subject        (default DEV_USER_ID)
+     *   X-Dev-Roles : CSV Cognito groups  (default "Admin")  e.g. "Borrower"
+     *   X-Dev-Org   : UUID org id         (default DEV_ORG_ID)
+     * Absent headers -> the original fixed dev ADMIN behavior (backward compatible).
+     *
+     * SECURITY: trust-the-header is a LOCAL-ONLY test seam. This class is @Profile("local") and is
+     * NEVER wired in dev/prod/test (those use SecurityConfig + real Cognito JWT). Do not lift it out.
+     */
     static class DevPrincipalFilter extends OncePerRequestFilter {
+        private static java.util.List<String> rolesFor(java.util.List<String> groups) {
+            java.util.List<String> auth = new java.util.ArrayList<>();
+            for (String g : groups) {
+                switch (g.trim()) {
+                    case "Admin" -> { auth.add("ROLE_ADMIN"); auth.add("ROLE_PLATFORM_ADMIN"); }
+                    case "Manager" -> auth.add("ROLE_MANAGER");
+                    case "LO" -> auth.add("ROLE_LO");
+                    case "Processor" -> auth.add("ROLE_PROCESSOR");
+                    case "Borrower" -> auth.add("ROLE_BORROWER");
+                    case "RealEstateAgent" -> auth.add("ROLE_REAL_ESTATE_AGENT");
+                    default -> { /* unknown dev role ignored */ }
+                }
+            }
+            return auth;
+        }
+
         @Override
         protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain)
                 throws ServletException, IOException {
+            String sub = headerOr(req, "X-Dev-Sub", DEV_USER_ID);
+            String org = headerOr(req, "X-Dev-Org", DEV_ORG_ID);
+            String rolesCsv = headerOr(req, "X-Dev-Roles", "Admin");
+            java.util.List<String> groups = java.util.Arrays.stream(rolesCsv.split(","))
+                    .map(String::trim).filter(s -> !s.isBlank()).toList();
+
             Jwt jwt = Jwt.withTokenValue("local-dev")
                 .header("alg", "none")
-                .subject(DEV_USER_ID)
-                .claim("cognito:groups", List.of("ADMIN"))
-                .claim("org_id", DEV_ORG_ID)
+                .subject(sub)
+                .claim("cognito:groups", groups)
+                .claim("org_id", org)
                 .claim("email_verified", true)
                 .issuedAt(Instant.now())
                 .expiresAt(Instant.now().plusSeconds(3600))
                 .build();
-            var auth = new JwtAuthenticationToken(jwt,
-                List.of(new SimpleGrantedAuthority("ROLE_PLATFORM_ADMIN"),
-                        new SimpleGrantedAuthority("ROLE_ADMIN")));
+            java.util.List<SimpleGrantedAuthority> authorities = rolesFor(groups).stream()
+                    .map(SimpleGrantedAuthority::new).toList();
+            var auth = new JwtAuthenticationToken(jwt, authorities);
             SecurityContextHolder.getContext().setAuthentication(auth);
             chain.doFilter(req, res);
+        }
+
+        private static String headerOr(HttpServletRequest req, String name, String dflt) {
+            String v = req.getHeader(name);
+            return (v == null || v.isBlank()) ? dflt : v.trim();
         }
     }
 }

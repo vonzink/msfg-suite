@@ -18,6 +18,11 @@ public class Loan extends TenantScopedEntity {
     @Column(nullable = false, unique = true, updatable = false)
     private String loanNumber;
 
+    // External idempotency key from the msfg.us apply funnel (the upstream lead id). Stamped only
+    // by POST /api/loans/intake so a retried hand-off resolves to the existing loan. Unique per org.
+    @Column(name = "source_lead_id", length = 100)
+    private String sourceLeadId;
+
     @Column(nullable = false)
     private UUID loanOfficerId;
 
