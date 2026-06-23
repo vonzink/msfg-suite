@@ -3,6 +3,13 @@
 Runs the whole borrower funnel locally with **no AWS**, using the dev-header identity bridge.
 Built by the `feat/local-e2e-funnel-harness` work (suite) + `feat/borrower-suite-repoint-slice` (mortgage-app).
 
+**Hand-off model (live):** the funnel uses the **token / `/continue`** flow — msfg.us mints a short-TTL
+signed hand-off token, redirects the browser to mortgage-app `/continue?t=<token>`, and the **loan is
+born in the suite at first authenticated apply** (carrying `source_lead_id`). The older **direct**
+hand-off (msfg.us → `:8081/api/loan-applications/intake` → `SuiteClient` → suite) still exists and works,
+but is **not wired into the live funnel** (its `losClient` caller is dormant) — it's kept as a BFF seam.
+Either path ends at the same suite endpoint, so the no-browser smoke test below is model-agnostic.
+
 **Shared dev constants** (identical across all apps):
 - Dev org id: `00000000-0000-0000-0000-0000000000aa`
 - Dev borrower sub: `00000000-0000-0000-0000-0000000000b0`
@@ -37,10 +44,14 @@ REACT_APP_DEV_ORG=00000000-0000-0000-0000-0000000000aa
 **`msfg.us/.env.local`**
 ```
 DATABASE_URL=postgresql://dev:dev@localhost:5434/msfg_web?schema=public
-LOS_API_BASE=http://localhost:8081
 NEXT_PUBLIC_APP_URL=http://localhost:3001
+# HANDOFF_TOKEN_SECRET=...   # optional locally (defaults to a dev secret); only used for the HS256 mint
+# LOS_API_BASE=http://localhost:8081   # LEGACY direct hand-off (losClient); dormant in the token model
 ```
-(`LOS_API_BASE` has no trailing `/api` — msfg.us appends `/api/loan-applications/intake`.)
+- `NEXT_PUBLIC_APP_URL` is the **redirect target** — msfg.us sends the browser to `<APP_URL>/continue?t=<token>`.
+- `HANDOFF_TOKEN_SECRET` signs the mint; the **FE only decodes** the non-sensitive payload (no signature
+  verification), so locally the secret need **not** match the app — set it only when wiring server-side verify.
+- `LOS_API_BASE` belongs to the legacy direct hand-off and is unused by the live funnel (left here for reference).
 
 ## Boot order
 1. **suite** — `cd ~/MSFG/msfg-suite && docker compose up -d && ./gradlew :app:bootRun --args='--spring.profiles.active=local'`
@@ -70,15 +81,25 @@ curl -s 'localhost:8080/api/me/loans?page=0&size=10' \
 # 3) Idempotency: re-run step 1 with the SAME sourceLeadId → same loanId (no duplicate loan).
 ```
 
-## Browser walk
+## Browser walk (token / `/continue` model)
 1. http://localhost:3000 (msfg.us) → run the apply wizard to the finish step.
-2. The finish step posts the lead; the msfg.us server hand-off calls mortgage-app
-   `:8081/api/loan-applications/intake`, which (via `SuiteClient`) creates the loan in **suite** and
-   returns the **suite loan id**; the browser deep-links to `:3001/applications/<suiteLoanId>`.
-3. The mortgage-app FE detail screen loads `GET :8080/api/loans/<suiteLoanId>` (from suite, with the FE's
+2. The finish step (a) posts the lead — `POST :3000/api/v1/leads` (captured in msfg.us Postgres + GHL),
+   then (b) mints a hand-off token — `POST :3000/api/v1/applications {leadId}` → `{ handoffToken }`, then
+   (c) **redirects the browser** to `:3001/continue?t=<handoffToken>`.
+3. `/continue` (`ContinuePage`): the FE **decodes** the non-sensitive token payload (no signature verify) →
+   **passwordless email-OTP** (Cognito deferred; the dev adapter auto-verifies locally) → renders the
+   **prefilled** application.
+4. On submit, the app posts to **suite** `POST :8080/api/loans/intake` (mapped by `continuePrefill.js` to the
+   origination `IntakeRequest`); the **loan is born in the suite** carrying `source_lead_id`, returning
+   `{ loanId, loanNumber }`; the browser lands on `:3001/applications/<suiteLoanId>`.
+5. The mortgage-app FE detail screen loads `GET :8080/api/loans/<suiteLoanId>` (from suite, with the FE's
    dev headers) — the loan shows.
-4. `:3001/applications` (list) → `GET :8080/api/me/loans` → the loan is listed for the borrower.
-5. Staff console (msfg-suite-web, run against suite :8080 as ADMIN — i.e. no dev headers) → the loan is visible.
+6. `:3001/applications` (list) → `GET :8080/api/me/loans` → the loan is listed for the borrower.
+7. Staff console (msfg-suite-web, run against suite :8080 as ADMIN — i.e. no dev headers) → the loan is visible.
+
+> The no-browser smoke test above exercises step 4's suite intake directly (model-agnostic), so it proves the
+> keystone data flow without the wizard/token/passwordless UI. To exercise the direct (BFF) hand-off instead,
+> `POST :8081/api/loan-applications/intake` (returns the suite loan id as `applicationId`).
 
 ## How identity works locally (no Cognito)
 - suite `local` profile: `LocalDevSecurityConfig` honors `X-Dev-Sub` / `X-Dev-Roles` / `X-Dev-Org` headers
