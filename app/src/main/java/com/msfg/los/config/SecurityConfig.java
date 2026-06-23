@@ -59,6 +59,10 @@ public class SecurityConfig {
                 // MUST precede the broad /api/admin/** rule — more specific matcher first.
                 .requestMatchers("/api/admin/document-types/**", "/api/admin/folder-templates/**")
                     .hasAnyRole("ADMIN", "PLATFORM_ADMIN")
+                // LO/Admin user administration (create user + reset password). MUST precede the broad
+                // /api/admin/** (PLATFORM_ADMIN) rule — more specific matcher first. Role-by-role
+                // assignment limits (an LO cannot mint staff/admin users) are enforced in the service.
+                .requestMatchers("/api/admin/users", "/api/admin/users/**").hasAnyRole("LO", "ADMIN")
                 .requestMatchers("/api/admin/**").hasRole("PLATFORM_ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/loans").hasAnyRole("LO", "MANAGER", "ADMIN")
                 // Borrower funnel hand-off (Phase A4): a signed-in BORROWER (or staff) creates a loan +

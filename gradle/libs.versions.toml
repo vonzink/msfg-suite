@@ -9,6 +9,7 @@ awsSdk = "2.46.11"
 springdoc-openapi = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
 aws-sdk-bom = { module = "software.amazon.awssdk:bom", version.ref = "awsSdk" }
 aws-sdk-s3 = { module = "software.amazon.awssdk:s3" }
+aws-sdk-cognito = { module = "software.amazon.awssdk:cognitoidentityprovider" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "springBoot" }
