@@ -3,6 +3,7 @@ package com.msfg.los.identity.adapter;
 import com.msfg.los.platform.security.UserAdminPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
@@ -14,6 +15,7 @@ import java.util.UUID;
  * the email (PII) — role + sub only.
  */
 @Component
+@ConditionalOnProperty(name = "los.identity.user-admin", havingValue = "stub", matchIfMissing = true)
 public class StubUserAdminAdapter implements UserAdminPort {
 
     private static final Logger log = LoggerFactory.getLogger(StubUserAdminAdapter.class);

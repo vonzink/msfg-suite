@@ -108,4 +108,36 @@ class UserAdminControllerIT extends AbstractIntegrationTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("FORBIDDEN"));
     }
+
+    @Test
+    void blankEmailIs400() throws Exception {
+        mvc.perform(post("/api/admin/users").with(as("ROLE_ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"  \",\"name\":\"X\",\"role\":\"BORROWER\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void unknownRoleIs400() throws Exception {
+        String email = "x+" + UUID.randomUUID() + "@example.com";
+        mvc.perform(post("/api/admin/users").with(as("ROLE_ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"%s\",\"name\":\"X\",\"role\":\"WIZARD\"}".formatted(email)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void duplicateEmailIs409() throws Exception {
+        String email = "dup+" + UUID.randomUUID() + "@example.com";
+        String payload = "{\"email\":\"%s\",\"name\":\"Dup\",\"role\":\"BORROWER\"}".formatted(email);
+        mvc.perform(post("/api/admin/users").with(as("ROLE_ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON).content(payload))
+                .andExpect(status().isCreated());
+        mvc.perform(post("/api/admin/users").with(as("ROLE_ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON).content(payload))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CONFLICT"));
+    }
 }
