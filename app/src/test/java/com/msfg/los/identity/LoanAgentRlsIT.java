@@ -60,16 +60,18 @@ class LoanAgentRlsIT extends AbstractIntegrationTest {
     @Test
     void flywayReachedV24() {
         // version is varchar (lexical), so don't max() it; assert the V24 row applied successfully
-        // and is the numeric head of the migration sequence.
+        // (this RLS test depends on the V24 loan_agent table).
         Integer v24applied = jdbc.queryForObject(
             "select count(*) from flyway_schema_history where success = true and version = '24'",
             Integer.class);
         assertThat(v24applied).as("V24 migration applied").isEqualTo(1);
 
+        // The migration sequence has advanced to at least V24 — assert a floor, not the exact head,
+        // so this guard survives every future migration (V25, V26, …) rather than breaking on each.
         Integer numericHead = jdbc.queryForObject(
             "select max(version::int) from flyway_schema_history " +
             "where success = true and version ~ '^[0-9]+$'", Integer.class);
-        assertThat(numericHead).as("Flyway numeric schema head").isEqualTo(24);
+        assertThat(numericHead).as("Flyway numeric schema head").isGreaterThanOrEqualTo(24);
     }
 
     @Test
