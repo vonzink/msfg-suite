@@ -4,6 +4,7 @@ import com.msfg.los.loan.service.LoanService;
 import com.msfg.los.parties.domain.*;
 import com.msfg.los.parties.repo.BorrowerRepository;
 import com.msfg.los.parties.web.dto.AddBorrowerRequest;
+import com.msfg.los.parties.web.dto.BorrowerContact;
 import com.msfg.los.parties.web.dto.UpdateBorrowerRequest;
 import com.msfg.los.platform.error.NotFoundException;
 import com.msfg.los.platform.pii.PiiAccessRecorder;
@@ -98,6 +99,21 @@ public class BorrowerService {
         return borrowers.findByIdAndOrgId(borrowerId, tenantContext.requireOrgId())
             .filter(b -> b.getLoanId().equals(loanId))
             .isPresent();
+    }
+
+    /**
+     * Cross-module read seam: the borrower's dispatch contacts (email + cellPhone) for a verification
+     * send (security spec §6.2), tenant- and loan-scoped, WITHOUT a loan access decision (callers guard
+     * loan access first via {@code assertCanAccess}, mirroring {@link #isBorrowerInLoan}/{@link #listByLoan}).
+     * Returns {@code null} when no such borrower exists in the caller's tenant + loan, so the caller can
+     * still return a generic response (no borrower-existence leak). Carries ONLY non-NPI contact fields.
+     */
+    @Transactional(readOnly = true)
+    public BorrowerContact resolveContact(UUID loanId, UUID borrowerId) {
+        return borrowers.findByIdAndOrgId(borrowerId, tenantContext.requireOrgId())
+            .filter(b -> b.getLoanId().equals(loanId))
+            .map(b -> new BorrowerContact(b.getEmail(), b.getCellPhone()))
+            .orElse(null);
     }
 
     @Transactional

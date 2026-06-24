@@ -1,6 +1,7 @@
 package com.msfg.los.platform.web;
 
 import com.msfg.los.platform.error.DomainException;
+import com.msfg.los.platform.error.TooManyRequestsException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -23,6 +24,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DomainException.class)
     public ResponseEntity<ApiError> handleDomain(DomainException ex) {
         return ResponseEntity.status(ex.status())
+            .body(ApiError.of(ex.code(), ex.getMessage(), Map.of(), Instant.now()));
+    }
+
+    // Rate-limit breach (e.g. OTP send throttle, security spec §6.3) → 429. Explicit handler
+    // alongside the DIV→409 / optimistic-lock→409 ones for dedicated logging (Spring still selects
+    // the most-specific handler, so this wins over handleDomain for TooManyRequestsException).
+    @ExceptionHandler(TooManyRequestsException.class)
+    public ResponseEntity<ApiError> handleTooManyRequests(TooManyRequestsException ex) {
+        log.warn("Rate limit exceeded: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
             .body(ApiError.of(ex.code(), ex.getMessage(), Map.of(), Instant.now()));
     }
     @ExceptionHandler(MethodArgumentNotValidException.class)

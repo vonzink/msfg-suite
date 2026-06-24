@@ -123,6 +123,19 @@ public class SecurityConfig {
                         "/api/loans/[0-9a-fA-F-]{36}/borrowers/[0-9a-fA-F-]{36}/"
                         + "(income|employments|assets|liabilities|declarations|demographics)(\\?.*)?"))
                     .hasAnyRole(STAFF_AND_BORROWER)
+                // Staff-initiated borrower verification (security spec §6.2): send/verify a one-time
+                // code to a borrower. LO/PROCESSOR/MANAGER/ADMIN only — BORROWER + REAL_ESTATE_AGENT are
+                // excluded (a borrower must never trigger codes). The authoritative loan-access +
+                // tenant/loan-membership check lives in BorrowerVerificationService. MUST precede the
+                // staff-only /api/** catch-all (this is the more specific matcher).
+                // DELIBERATE narrowing: this is the spec's active-borrower-handler set; it is intentionally
+                // NARROWER than the service's assertCanAccess guard (which also admits UNDERWRITER/CLOSER
+                // org-wide). Fail-safe (more restrictive than the guard). If UW/CLOSER should be able to
+                // verify a borrower's identity, widen to hasAnyRole(STAFF) here — don't "fix" it blindly.
+                .requestMatchers(HttpMethod.POST,
+                        "/api/identity/borrowers/*/send-verification",
+                        "/api/identity/borrowers/*/verify-code")
+                    .hasAnyRole("LO", "PROCESSOR", "MANAGER", "ADMIN")
                 // Catch-all: every other API path is staff-only. Parties never reach writes or any
                 // non-allowlisted read (they are not in this authority set → 403 at the filter).
                 .requestMatchers("/api/**").hasAnyRole(STAFF)
