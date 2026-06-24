@@ -159,6 +159,12 @@ public class BorrowerVerificationService {
     // ── helpers ─────────────────────────────────────────────────────────────
 
     private void enforceSendThrottle(UUID borrowerId) {
+        // NOTE (accepted): count-then-insert is a check-then-act TOCTOU — two concurrent sends for the
+        // same (org, borrower) can both read count < MAX and proceed, slightly overshooting the ceiling.
+        // Fail-safe for this low-frequency, audited, staff-initiated action (every send still persists an
+        // audit row; the verify-side lockout is independent + DB-atomic, so there is no brute-force path).
+        // Harden with an advisory lock / partial unique index on (org_id, borrower_id, window-bucket) only
+        // if abuse appears.
         Instant since = Instant.now().minus(SEND_WINDOW);
         long perBorrower = requests.countByBorrowerIdAndCreatedAtGreaterThanEqual(borrowerId, since);
         long perStaff = requests.countByCreatedByAndCreatedAtGreaterThanEqual(currentSub(), since);

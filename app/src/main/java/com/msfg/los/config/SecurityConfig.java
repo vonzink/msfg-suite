@@ -128,6 +128,10 @@ public class SecurityConfig {
                 // excluded (a borrower must never trigger codes). The authoritative loan-access +
                 // tenant/loan-membership check lives in BorrowerVerificationService. MUST precede the
                 // staff-only /api/** catch-all (this is the more specific matcher).
+                // DELIBERATE narrowing: this is the spec's active-borrower-handler set; it is intentionally
+                // NARROWER than the service's assertCanAccess guard (which also admits UNDERWRITER/CLOSER
+                // org-wide). Fail-safe (more restrictive than the guard). If UW/CLOSER should be able to
+                // verify a borrower's identity, widen to hasAnyRole(STAFF) here — don't "fix" it blindly.
                 .requestMatchers(HttpMethod.POST,
                         "/api/identity/borrowers/*/send-verification",
                         "/api/identity/borrowers/*/verify-code")

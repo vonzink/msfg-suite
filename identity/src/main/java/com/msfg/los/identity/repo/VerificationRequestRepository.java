@@ -33,4 +33,13 @@ public interface VerificationRequestRepository extends JpaRepository<Verificatio
      * tenant-scoped by {@code @TenantId}.
      */
     Optional<VerificationRequest> findFirstByLoanIdAndBorrowerIdOrderByCreatedAtDesc(UUID loanId, UUID borrowerId);
+
+    /**
+     * Tenant-scoped PK lookup for the attempt recorder's REQUIRES_NEW tx. Use this, NOT the inherited
+     * {@code findById} — per the project invariant (CLAUDE.md) Hibernate's {@code @TenantId} does NOT
+     * filter {@code find()}-by-PK, so a bare PK lookup is not tenant-scoped at the app layer. The
+     * explicit {@code orgId} predicate (plus the {@code @TenantId} filter this derived query also gets)
+     * keeps it fail-closed even if a caller ever passes an externally-sourced id.
+     */
+    Optional<VerificationRequest> findByIdAndOrgId(UUID id, UUID orgId);
 }
