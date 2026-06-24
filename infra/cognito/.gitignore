@@ -1,0 +1,3 @@
+# Point-in-time pool-config backups written by p1-enable-passkey.sh --apply.
+# Local restore safety-net only; not a source artifact.
+backups/
