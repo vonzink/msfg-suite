@@ -35,7 +35,7 @@ $SSH "$EC2_HOST" "cd $EC2_DIR && docker build --pull=false -f Dockerfile.runtime
 
 echo "▸ Waiting for suite health (Flyway runs on boot → new migrations apply here)…"
 $SSH "$EC2_HOST" 'for i in $(seq 1 40); do
-    curl -fsS http://127.0.0.1:8080/actuator/health >/dev/null 2>&1 && { echo "  ✓ /actuator/health UP"; exit 0; }
+    curl -fsS http://127.0.0.1:8082/actuator/health >/dev/null 2>&1 && { echo "  ✓ /actuator/health UP"; exit 0; }
     sleep 3
   done; echo "  ✗ health timed out — recent logs:"; docker logs --tail 40 msfg-suite-app; exit 1'
 
