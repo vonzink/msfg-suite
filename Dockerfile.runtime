@@ -1,0 +1,8 @@
+# Thin runtime image for the JAR-ship deploy (deploy-suite.sh builds the bootJar LOCALLY with
+# Gradle and ships just the jar; the box builds THIS — FROM the cached JRE + COPY jar — so the box
+# never runs Gradle and never pulls from docker.io for the build. Trivial memory: no OOM risk.
+FROM eclipse-temurin:21-jre
+WORKDIR /app
+COPY app.jar app.jar
+EXPOSE 8080
+ENTRYPOINT ["java","-jar","app.jar"]
