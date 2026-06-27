@@ -282,4 +282,61 @@ class BorrowerApplicationIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data.length()").value(1))
                 .andExpect(jsonPath("$.data[0].assetType").value("SAVINGS"));
     }
+
+    @Test
+    void replaceIsScopedToOwnRow_coBorrowerAndNullOwnerReoSurvive() throws Exception {
+        String loan = createLoan();
+        String subA = UUID.randomUUID().toString();
+        String subB = UUID.randomUUID().toString();
+        String aId = addBorrower(loan, "Ann", true);    // primary
+        String bId = addBorrower(loan, "Bob", false);   // co-borrower
+        linkUser(loan, aId, subA);
+        linkUser(loan, bId, subB);
+        RequestPostProcessor a = as(subA, "ROLE_BORROWER");
+        RequestPostProcessor b = as(subB, "ROLE_BORROWER");
+
+        // Seed a loan-level REO with NO owner (staff) — a borrower replace must never delete it.
+        mvc.perform(post("/api/loans/{l}/reo", loan).with(as(LO_A, "ROLE_LO"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"propertyStatus\":\"RETAINED\",\"addressLine1\":\"9 Owned Ln\",\"city\":\"Denver\",\"state\":\"CO\"}"))
+                .andExpect(status().isCreated());
+
+        mvc.perform(put("/api/loans/{l}/application", loan).with(a).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"assets\":[{\"assetType\":\"CHECKING\",\"cashOrMarketValue\":100}]}")).andExpect(status().isOk());
+        mvc.perform(put("/api/loans/{l}/application", loan).with(b).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"assets\":[{\"assetType\":\"SAVINGS\",\"cashOrMarketValue\":200}],\"reo\":[]}")).andExpect(status().isOk());
+
+        // B's full-replace touched ONLY B's rows — A's asset survives.
+        mvc.perform(get("/api/loans/{l}/borrowers/{b}/assets", loan, aId).with(a))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].assetType").value("CHECKING"));
+        mvc.perform(get("/api/loans/{l}/borrowers/{b}/assets", loan, bId).with(b))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].assetType").value("SAVINGS"));
+        // The null-owner REO survived B's reo:[] replace (REO delete is scoped to ownerBorrowerId==caller).
+        mvc.perform(get("/api/loans/{l}/reo", loan).with(as(LO_A, "ROLE_LO")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(1));
+    }
+
+    @Test
+    void incomeReplaceSecondPutRelinksAndDoesNotAppend() throws Exception {
+        String loan = createLoan();
+        String me = UUID.randomUUID().toString();
+        String myId = addBorrower(loan, "Pat", true);
+        linkUser(loan, myId, me);
+        RequestPostProcessor who = as(me, "ROLE_BORROWER");
+
+        mvc.perform(put("/api/loans/{l}/application", loan).with(who).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"income\":{\"employments\":[{\"employerName\":\"First Co\",\"employmentStatus\":\"CURRENT\",\"classification\":\"PRIMARY\",\"monthlyIncome\":5000}],\"otherIncome\":[]}}"))
+                .andExpect(status().isOk());
+        mvc.perform(put("/api/loans/{l}/application", loan).with(who).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"income\":{\"employments\":[{\"employerName\":\"Second Co\",\"employmentStatus\":\"CURRENT\",\"classification\":\"PRIMARY\",\"monthlyIncome\":7000}],\"otherIncome\":[]}}"))
+                .andExpect(status().isOk());
+        // The FK-coordinated replace: exactly one employment + one BASE income (re-linked, no append/orphan).
+        mvc.perform(get("/api/loans/{l}/borrowers/{b}/employments", loan, myId).with(who))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].employerName").value("Second Co"));
+        mvc.perform(get("/api/loans/{l}/borrowers/{b}/income", loan, myId).with(who))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(1));
+    }
 }

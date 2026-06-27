@@ -10,8 +10,10 @@ import com.msfg.los.origination.web.dto.BorrowerApplicationResponse;
 import com.msfg.los.parties.domain.BorrowerParty;
 import com.msfg.los.parties.service.BorrowerService;
 import com.msfg.los.parties.web.dto.UpdateBorrowerRequest;
+import com.msfg.los.declarations.domain.ApplicationTakenMethod;
 import com.msfg.los.declarations.service.DeclarationsService;
 import com.msfg.los.declarations.service.DemographicsService;
+import com.msfg.los.declarations.web.dto.DemographicsRequest;
 import com.msfg.los.financials.service.AssetService;
 import com.msfg.los.financials.service.LiabilityService;
 import com.msfg.los.financials.web.dto.AddAssetRequest;
@@ -152,7 +154,7 @@ public class BorrowerApplicationService {
             declarationsService.upsertInternal(loanId, bid, req.declarations());
         }
         if (req.demographics() != null) {
-            demographicsService.upsertInternal(loanId, bid, req.demographics());
+            demographicsService.upsertInternal(loanId, bid, toDemographicsRequest(req.demographics()));
         }
 
         return toResponse(updatedLoan, updatedBorrower);
@@ -255,6 +257,12 @@ public class BorrowerApplicationService {
         // includeInDti/exclusionReason are UW decisions → null (defaults include=true, reason cleared).
         return new AddLiabilityRequest(l.liabilityType(), l.creditorName(), l.accountNumber(),
             l.unpaidBalance(), l.monthlyPayment(), null, null, l.monthsRemaining());
+    }
+
+    private DemographicsRequest toDemographicsRequest(BorrowerApplicationRequest.DemographicsInfo in) {
+        // HMDA self-report only. The lender-attestation fields are NOT borrower-settable: a self-service
+        // online submission is, by definition, NOT collected by visual observation/surname and IS via INTERNET.
+        return new DemographicsRequest(in.ethnicity(), in.race(), in.sex(), false, ApplicationTakenMethod.INTERNET);
     }
 
     private AddReoRequest toAddReoRequest(BorrowerApplicationRequest.ReoInfo r) {

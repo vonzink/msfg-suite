@@ -1,7 +1,9 @@
 package com.msfg.los.origination.web.dto;
 
+import com.msfg.los.declarations.domain.Ethnicity;
+import com.msfg.los.declarations.domain.Race;
+import com.msfg.los.declarations.domain.Sex;
 import com.msfg.los.declarations.web.dto.DeclarationsRequest;
-import com.msfg.los.declarations.web.dto.DemographicsRequest;
 import com.msfg.los.financials.domain.AssetType;
 import com.msfg.los.financials.domain.LiabilityType;
 import com.msfg.los.income.domain.EmploymentClassificationType;
@@ -19,6 +21,7 @@ import com.msfg.los.reo.domain.ReoPropertyStatus;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Borrower-self application upsert (Stage 2) — the full 1003 the client {@code /apply} form submits.
@@ -41,7 +44,7 @@ public record BorrowerApplicationRequest(
     List<LiabilityInfo> liabilities,
     List<ReoInfo> reo,
     DeclarationsRequest declarations,
-    DemographicsRequest demographics) {
+    DemographicsInfo demographics) {
 
     public record LoanInfo(
         MortgageType mortgageType,
@@ -138,4 +141,14 @@ public record BorrowerApplicationRequest(
         BigDecimal monthlyMaintenance,
         BigDecimal mortgageUnpaidBalance,
         BigDecimal mortgageMonthlyPayment) {}
+
+    /**
+     * HMDA self-report ONLY (ethnicity/race/sex). The lender-attestation fields
+     * {@code collectedByVisualObservationOrSurname} and {@code applicationTakenMethod} are NOT
+     * borrower-settable — the orchestrator forces them (self-service = not-by-observation, INTERNET).
+     */
+    public record DemographicsInfo(
+        Set<Ethnicity> ethnicity,
+        Set<Race> race,
+        Sex sex) {}
 }
