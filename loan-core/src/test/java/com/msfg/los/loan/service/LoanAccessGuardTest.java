@@ -217,4 +217,46 @@ class LoanAccessGuardTest {
         assertThatThrownBy(() -> guard(userWith(UUID.randomUUID().toString(), Role.PLATFORM_ADMIN.authority()))
                 .assertBorrowerSelfReadable(loanWithId(), BORROWER_ID)).isInstanceOf(ForbiddenException.class);
     }
+
+    // ── assertBorrowerSelfWritable (per-borrower own-data WRITE) ──────────────────
+    // The write-side mirror of assertBorrowerSelfReadable: staff-or-owning-LO (unchanged), OR a
+    // ROLE_BORROWER whose sub IS the SAME borrower row being written. A co-borrower's borrowerId, an
+    // unlinked/non-self borrower, an agent, and PLATFORM_ADMIN never pass. This is the ONLY predicate
+    // that admits a borrower to a write; every pre-existing per-module write keeps assertCanAccess.
+
+    @Test void selfWritableForOwningLo() {
+        assertThatCode(() -> guard(userWith(OWNER.toString(), Role.LO.authority()))
+                .assertBorrowerSelfWritable(loanWithId(), BORROWER_ID)).doesNotThrowAnyException();
+    }
+    @Test void selfWritableForOrgWideStaff() {
+        assertThatCode(() -> guard(userWith(UUID.randomUUID().toString(), Role.PROCESSOR.authority()))
+                .assertBorrowerSelfWritable(loanWithId(), BORROWER_ID)).doesNotThrowAnyException();
+    }
+    @Test void selfWritableForBorrowerWritingOwnRow() {
+        UUID sub = UUID.randomUUID();
+        assertThatCode(() -> guard(userWith(sub.toString(), Role.BORROWER.authority()), null, null, BORROWER_ID, sub)
+                .assertBorrowerSelfWritable(loanWithId(), BORROWER_ID)).doesNotThrowAnyException();
+    }
+    // A borrower writing a CO-BORROWER's borrowerId is denied — self-match is per borrower row.
+    @Test void selfNotWritableForCoBorrowerRow() {
+        UUID sub = UUID.randomUUID();
+        UUID coBorrowerId = UUID.randomUUID();
+        assertThatThrownBy(() -> guard(userWith(sub.toString(), Role.BORROWER.authority()), null, null, BORROWER_ID, sub)
+                .assertBorrowerSelfWritable(loanWithId(), coBorrowerId)).isInstanceOf(ForbiddenException.class);
+    }
+    @Test void selfNotWritableForUnlinkedBorrower() {
+        UUID sub = UUID.randomUUID();
+        assertThatThrownBy(() -> guard(userWith(sub.toString(), Role.BORROWER.authority()), null, null, null, null)
+                .assertBorrowerSelfWritable(loanWithId(), BORROWER_ID)).isInstanceOf(ForbiddenException.class);
+    }
+    // An agent never reaches per-borrower writes, even self-matched on the same id (role gate).
+    @Test void selfNotWritableForAgent() {
+        UUID sub = UUID.randomUUID();
+        assertThatThrownBy(() -> guard(userWith(sub.toString(), Role.REAL_ESTATE_AGENT.authority()), null, sub, BORROWER_ID, sub)
+                .assertBorrowerSelfWritable(loanWithId(), BORROWER_ID)).isInstanceOf(ForbiddenException.class);
+    }
+    @Test void selfNotWritableForPlatformAdmin() {
+        assertThatThrownBy(() -> guard(userWith(UUID.randomUUID().toString(), Role.PLATFORM_ADMIN.authority()))
+                .assertBorrowerSelfWritable(loanWithId(), BORROWER_ID)).isInstanceOf(ForbiddenException.class);
+    }
 }

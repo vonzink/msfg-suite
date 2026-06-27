@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -119,6 +120,19 @@ public class BorrowerService {
     @Transactional
     public BorrowerParty update(UUID loanId, UUID borrowerId, UpdateBorrowerRequest req) {
         accessGuard.assertCanAccess(loanService.get(loanId));
+        return updateInternal(loanId, borrowerId, req);
+    }
+
+    /**
+     * Privileged self-service write seam (Stage-2 borrower-self application): merge-update a borrower
+     * row WITHOUT the staff {@code assertCanAccess} loan gate. Authorization lives at the caller —
+     * {@code BorrowerApplicationService} asserts {@link LoanAccessGuard#assertBorrowerSelfWritable}
+     * (caller is staff/owning-LO, or a BORROWER editing their OWN row) before invoking this. Used ONLY
+     * by the borrower-application orchestrator; the public {@link #update} keeps the staff gate. Merge
+     * semantics (only non-null fields applied) are identical to {@code update} so behaviour is unchanged.
+     */
+    @Transactional
+    public BorrowerParty updateInternal(UUID loanId, UUID borrowerId, UpdateBorrowerRequest req) {
         BorrowerParty b = load(loanId, borrowerId);
         if (req.firstName() != null) b.setFirstName(req.firstName());
         if (req.lastName() != null) b.setLastName(req.lastName());
@@ -128,6 +142,24 @@ public class BorrowerService {
             req.workPhone(), req.workPhoneExt(), req.email(), req.noEmail());
         if (Boolean.TRUE.equals(req.primary())) { clearOtherPrimaries(loanId, borrowerId); b.setPrimary(true); }
         return b;
+    }
+
+    /**
+     * No-guard read seam: resolve the caller's OWN borrower row on a loan by linked {@code user_id}
+     * (Cognito sub). The {@code BorrowerApplicationService} orchestrator authorizes via
+     * {@link LoanAccessGuard#assertBorrowerSelfWritable}/{@code assertBorrowerSelfReadable} on the
+     * returned id before any read/write. Empty when the user is not a borrower on this loan.
+     */
+    @Transactional(readOnly = true)
+    public Optional<BorrowerParty> findSelf(UUID loanId, UUID userId) {
+        if (userId == null) return Optional.empty();
+        return borrowers.findFirstByLoanIdAndUserIdOrderByOrdinalAsc(loanId, userId);
+    }
+
+    /** No-guard read seam: the loan's PRIMARY borrower row (intake-created applicant). Caller authorizes. */
+    @Transactional(readOnly = true)
+    public Optional<BorrowerParty> findPrimary(UUID loanId) {
+        return borrowers.findFirstByLoanIdAndPrimaryTrueOrderByOrdinalAsc(loanId);
     }
 
     @Transactional
