@@ -10,12 +10,27 @@ import com.msfg.los.origination.web.dto.BorrowerApplicationResponse;
 import com.msfg.los.parties.domain.BorrowerParty;
 import com.msfg.los.parties.service.BorrowerService;
 import com.msfg.los.parties.web.dto.UpdateBorrowerRequest;
+import com.msfg.los.declarations.service.DeclarationsService;
+import com.msfg.los.declarations.service.DemographicsService;
+import com.msfg.los.financials.service.AssetService;
+import com.msfg.los.financials.service.LiabilityService;
+import com.msfg.los.financials.web.dto.AddAssetRequest;
+import com.msfg.los.financials.web.dto.AddLiabilityRequest;
+import com.msfg.los.income.domain.Employment;
+import com.msfg.los.income.domain.IncomeType;
+import com.msfg.los.income.service.EmploymentService;
+import com.msfg.los.income.service.IncomeService;
+import com.msfg.los.income.web.dto.AddEmploymentRequest;
+import com.msfg.los.income.web.dto.AddIncomeRequest;
+import com.msfg.los.reo.service.ReoService;
+import com.msfg.los.reo.web.dto.AddReoRequest;
 import com.msfg.los.platform.error.ForbiddenException;
 import com.msfg.los.platform.error.NotFoundException;
 import com.msfg.los.platform.security.CurrentUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -44,13 +59,31 @@ public class BorrowerApplicationService {
     private final BorrowerService borrowerService;
     private final LoanAccessGuard accessGuard;
     private final CurrentUser currentUser;
+    private final EmploymentService employmentService;
+    private final IncomeService incomeService;
+    private final AssetService assetService;
+    private final LiabilityService liabilityService;
+    private final ReoService reoService;
+    private final DeclarationsService declarationsService;
+    private final DemographicsService demographicsService;
 
     public BorrowerApplicationService(LoanService loanService, BorrowerService borrowerService,
-                                      LoanAccessGuard accessGuard, CurrentUser currentUser) {
+                                      LoanAccessGuard accessGuard, CurrentUser currentUser,
+                                      EmploymentService employmentService, IncomeService incomeService,
+                                      AssetService assetService, LiabilityService liabilityService,
+                                      ReoService reoService, DeclarationsService declarationsService,
+                                      DemographicsService demographicsService) {
         this.loanService = loanService;
         this.borrowerService = borrowerService;
         this.accessGuard = accessGuard;
         this.currentUser = currentUser;
+        this.employmentService = employmentService;
+        this.incomeService = incomeService;
+        this.assetService = assetService;
+        this.liabilityService = liabilityService;
+        this.reoService = reoService;
+        this.declarationsService = declarationsService;
+        this.demographicsService = demographicsService;
     }
 
     /** Hydrate the caller's application view. Borrower reads their own row; staff read the primary. */
@@ -80,7 +113,53 @@ public class BorrowerApplicationService {
             ? borrowerService.updateInternal(loanId, target.getId(), toUpdateBorrowerRequest(req.borrower()))
             : target;
 
+        final UUID bid = target.getId();
+
+        // Income + employment replace TOGETHER (null section = skip; present = full replace). FK ordering:
+        // delete IncomeItems (children) → Employments (parents); re-add employments (capture new ids) →
+        // income referencing those ids (employment income = BASE IncomeItem on the new id; other income = null id).
+        if (req.income() != null) {
+            incomeService.deleteAllForBorrowerInternal(loanId, bid);
+            employmentService.deleteAllForBorrowerInternal(loanId, bid);
+            for (BorrowerApplicationRequest.EmploymentInfo e : nullToEmpty(req.income().employments())) {
+                Employment saved = employmentService.addInternal(loanId, bid, toAddEmploymentRequest(e));
+                if (e.monthlyIncome() != null) {
+                    incomeService.addInternal(loanId, bid,
+                        new AddIncomeRequest(IncomeType.BASE, e.monthlyIncome(), saved.getId(), null));
+                }
+            }
+            for (BorrowerApplicationRequest.OtherIncomeInfo oi : nullToEmpty(req.income().otherIncome())) {
+                incomeService.addInternal(loanId, bid,
+                    new AddIncomeRequest(oi.incomeType(), oi.monthlyAmount(), null, oi.description()));
+            }
+        }
+        // Per-borrower list sections: null = skip, non-null = full replace (empty clears). REO is forced
+        // to the caller's ownerBorrowerId by the seam.
+        if (req.assets() != null) {
+            assetService.replaceForBorrowerInternal(loanId, bid,
+                nullToEmpty(req.assets()).stream().map(this::toAddAssetRequest).toList());
+        }
+        if (req.liabilities() != null) {
+            liabilityService.replaceForBorrowerInternal(loanId, bid,
+                nullToEmpty(req.liabilities()).stream().map(this::toAddLiabilityRequest).toList());
+        }
+        if (req.reo() != null) {
+            reoService.replaceForBorrowerInternal(loanId, bid,
+                nullToEmpty(req.reo()).stream().map(this::toAddReoRequest).toList());
+        }
+        // 1:1 sections: null = skip, present = full upsert.
+        if (req.declarations() != null) {
+            declarationsService.upsertInternal(loanId, bid, req.declarations());
+        }
+        if (req.demographics() != null) {
+            demographicsService.upsertInternal(loanId, bid, req.demographics());
+        }
+
         return toResponse(updatedLoan, updatedBorrower);
+    }
+
+    private static <T> List<T> nullToEmpty(List<T> list) {
+        return list == null ? List.of() : list;
     }
 
     /**
@@ -156,6 +235,35 @@ public class BorrowerApplicationService {
             null, null,                            // unmarriedAddendumSpousalRights, joinedToBorrowerId
             in.homePhone(), in.cellPhone(), in.workPhone(), in.workPhoneExt(),
             in.email(), null);                     // noEmail unchanged
+    }
+
+    private AddEmploymentRequest toAddEmploymentRequest(BorrowerApplicationRequest.EmploymentInfo e) {
+        return new AddEmploymentRequest(
+            e.employerName(), e.employerPhone(), e.employerAddressLine1(), e.employerAddressLine2(),
+            e.employerCity(), e.employerState(), e.employerPostalCode(), e.positionTitle(),
+            e.employmentStatus(), e.classification(), e.selfEmployed(), e.ownershipShare(),
+            e.employedByPartyToTransaction(), e.startDate(), e.endDate(), e.monthsInLineOfWork());
+    }
+
+    private AddAssetRequest toAddAssetRequest(BorrowerApplicationRequest.AssetInfo a) {
+        // verified (VOA) is staff-only → null (default unverified).
+        return new AddAssetRequest(a.assetType(), a.financialInstitution(), a.accountNumber(),
+            a.cashOrMarketValue(), null);
+    }
+
+    private AddLiabilityRequest toAddLiabilityRequest(BorrowerApplicationRequest.LiabilityInfo l) {
+        // includeInDti/exclusionReason are UW decisions → null (defaults include=true, reason cleared).
+        return new AddLiabilityRequest(l.liabilityType(), l.creditorName(), l.accountNumber(),
+            l.unpaidBalance(), l.monthlyPayment(), null, null, l.monthsRemaining());
+    }
+
+    private AddReoRequest toAddReoRequest(BorrowerApplicationRequest.ReoInfo r) {
+        // ownerBorrowerId is forced to the caller by the seam → pass null here (body not trusted).
+        return new AddReoRequest(
+            null, r.isSubjectProperty(), r.addressLine1(), r.addressLine2(), r.city(), r.state(),
+            r.postalCode(), r.propertyType(), r.intendedOccupancy(), r.propertyStatus(),
+            r.marketValue(), r.grossMonthlyRentalIncome(), r.monthlyTaxes(), r.monthlyInsurance(),
+            r.monthlyHoaDues(), r.monthlyMaintenance(), r.mortgageUnpaidBalance(), r.mortgageMonthlyPayment());
     }
 
     private BorrowerApplicationResponse toResponse(Loan loan, BorrowerParty b) {

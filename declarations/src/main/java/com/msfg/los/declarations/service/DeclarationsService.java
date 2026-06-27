@@ -56,6 +56,21 @@ public class DeclarationsService {
     @Transactional
     public BorrowerDeclarations upsert(UUID loanId, UUID borrowerId, DeclarationsRequest req) {
         assertBorrowerInLoan(loanId, borrowerId);
+        return upsertInternal(loanId, borrowerId, req);
+    }
+
+    /**
+     * No-guard PUT-upsert seam (Stage-2 borrower-self application): full-replace the borrower's
+     * declarations row WITHOUT the staff {@link #assertBorrowerInLoan} gate. Authorization lives at
+     * the caller — {@code BorrowerApplicationService} asserts
+     * {@link LoanAccessGuard#assertBorrowerSelfWritable} before invoking this. Used ONLY by the
+     * borrower-application orchestrator; the public {@link #upsert} keeps the staff gate. Replace
+     * semantics (find-by-borrowerId-or-create, every field including nulls/empty sets) are identical
+     * to {@code upsert} so behaviour is unchanged. Runs in one tenant-scoped ({@code @TenantId})
+     * transaction.
+     */
+    @Transactional
+    public BorrowerDeclarations upsertInternal(UUID loanId, UUID borrowerId, DeclarationsRequest req) {
         var e = repo.findByBorrowerId(borrowerId).orElseGet(() -> {
             var n = new BorrowerDeclarations();
             n.setLoanId(loanId);

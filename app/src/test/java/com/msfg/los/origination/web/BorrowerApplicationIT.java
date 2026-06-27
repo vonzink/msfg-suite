@@ -220,4 +220,66 @@ class BorrowerApplicationIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data.borrowerId").value(myId))
                 .andExpect(jsonPath("$.data.borrower.firstName").value("Pat"));
     }
+
+    // ── breadth: all 1003 sections persist via the borrower-self write path ───────────────
+    @Test
+    void borrowerSavesFullApplicationAllSections() throws Exception {
+        String loan = createLoan();
+        String me = UUID.randomUUID().toString();
+        String myId = addBorrower(loan, "Pat", true);
+        linkUser(loan, myId, me);
+
+        String body = """
+            {"income":{
+               "employments":[{"employerName":"Acme Corp","employmentStatus":"CURRENT","classification":"PRIMARY","selfEmployed":false,"monthlyIncome":6000}],
+               "otherIncome":[{"incomeType":"CHILD_SUPPORT","monthlyAmount":500}]},
+             "assets":[{"assetType":"CHECKING","financialInstitution":"BankCo","cashOrMarketValue":12000}],
+             "liabilities":[{"liabilityType":"REVOLVING","creditorName":"Visa","monthlyPayment":150,"unpaidBalance":3000}],
+             "reo":[{"isSubjectProperty":false,"addressLine1":"1 Rental Rd","city":"Denver","state":"CO","propertyType":"SINGLE_FAMILY","intendedOccupancy":"INVESTMENT","propertyStatus":"RENTAL","marketValue":300000,"grossMonthlyRentalIncome":2000}],
+             "declarations":{"occupyAsPrimaryResidence":true,"declaredBankruptcyLast7Years":false},
+             "demographics":{"sex":"MALE"}}""";
+
+        mvc.perform(put("/api/loans/{l}/application", loan).with(as(me, "ROLE_BORROWER"))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk());
+
+        RequestPostProcessor who = as(me, "ROLE_BORROWER");
+        // Verify each section persisted via the existing borrower-self (T11) GET endpoints.
+        mvc.perform(get("/api/loans/{l}/borrowers/{b}/employments", loan, myId).with(who))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data[0].employerName").value("Acme Corp"));
+        mvc.perform(get("/api/loans/{l}/borrowers/{b}/income", loan, myId).with(who))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(2)); // BASE (employment) + CHILD_SUPPORT
+        mvc.perform(get("/api/loans/{l}/borrowers/{b}/assets", loan, myId).with(who))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data[0].assetType").value("CHECKING"));
+        mvc.perform(get("/api/loans/{l}/borrowers/{b}/liabilities", loan, myId).with(who))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data[0].liabilityType").value("REVOLVING"));
+        mvc.perform(get("/api/loans/{l}/borrowers/{b}/declarations", loan, myId).with(who))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.occupyAsPrimaryResidence").value(true));
+        mvc.perform(get("/api/loans/{l}/borrowers/{b}/demographics", loan, myId).with(who))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.sex").value("MALE"));
+        // REO is loan-scoped (no borrower-self read) → verify via staff.
+        mvc.perform(get("/api/loans/{l}/reo", loan).with(as(LO_A, "ROLE_LO")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data[0].propertyStatus").value("RENTAL"));
+    }
+
+    @Test
+    void listSectionPutReplacesNotAppends() throws Exception {
+        String loan = createLoan();
+        String me = UUID.randomUUID().toString();
+        String myId = addBorrower(loan, "Pat", true);
+        linkUser(loan, myId, me);
+        RequestPostProcessor who = as(me, "ROLE_BORROWER");
+
+        mvc.perform(put("/api/loans/{l}/application", loan).with(who).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"assets\":[{\"assetType\":\"CHECKING\",\"cashOrMarketValue\":100}]}"))
+                .andExpect(status().isOk());
+        mvc.perform(put("/api/loans/{l}/application", loan).with(who).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"assets\":[{\"assetType\":\"SAVINGS\",\"cashOrMarketValue\":200}]}"))
+                .andExpect(status().isOk());
+        // Full-replace (not append) → exactly one asset, the SAVINGS one.
+        mvc.perform(get("/api/loans/{l}/borrowers/{b}/assets", loan, myId).with(who))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].assetType").value("SAVINGS"));
+    }
 }

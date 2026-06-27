@@ -67,6 +67,11 @@ public class AssetService {
     @Transactional
     public Asset add(UUID loanId, UUID borrowerId, AddAssetRequest req) {
         assertBorrowerInLoan(loanId, borrowerId);
+        return insert(loanId, borrowerId, req);
+    }
+
+    /** Shared construction + validation + ordinal mechanics for {@link #add} and {@link #replaceForBorrowerInternal}. */
+    private Asset insert(UUID loanId, UUID borrowerId, AddAssetRequest req) {
         validateValue(req.cashOrMarketValue());
         Asset asset = new Asset();
         asset.setLoanId(loanId);
@@ -78,6 +83,33 @@ public class AssetService {
         asset.setVerified(req.verified());
         asset.setOrdinal(nextOrdinal(borrowerId));
         return assets.save(asset);
+    }
+
+    /**
+     * No-guard self-service write seam (Stage-2 borrower-self application): REPLACE the borrower's
+     * entire asset set with {@code items}. Deletes the borrower's existing rows (loaded via
+     * {@code findByBorrowerIdOrderByOrdinalAscIdAsc} then {@code deleteAll} so org + RLS scoping
+     * holds — never an unscoped bulk delete), then re-adds each item through the SAME
+     * {@link #insert} mechanics the public {@link #add} uses (so {@link #validateValue} and the
+     * max+1 ordinal logic run per row; ordinals re-derive 0..n-1 from the now-empty set).
+     *
+     * <p>No-guard; caller authorizes via {@link LoanAccessGuard#assertBorrowerSelfWritable}. The
+     * {@code BorrowerApplicationService} orchestrator asserts that gate before invoking this. The
+     * public {@link #add}/{@link #update}/{@link #delete} keep their staff {@link #assertBorrowerInLoan}.
+     * Runs in one {@code @Transactional} method.
+     */
+    @Transactional
+    public List<Asset> replaceForBorrowerInternal(UUID loanId, UUID borrowerId, List<AddAssetRequest> items) {
+        List<Asset> existing = assets.findByBorrowerIdOrderByOrdinalAscIdAsc(borrowerId);
+        assets.deleteAll(existing);
+        assets.flush();
+        List<Asset> created = new java.util.ArrayList<>();
+        if (items != null) {
+            for (AddAssetRequest req : items) {
+                created.add(insert(loanId, borrowerId, req));
+            }
+        }
+        return created;
     }
 
     @Transactional(readOnly = true)

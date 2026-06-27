@@ -76,7 +76,16 @@ public class ReoService {
     @Transactional
     public RealEstateOwned add(UUID loanId, AddReoRequest req) {
         accessGuard.assertCanAccess(loanService.get(loanId));
+        return insert(loanId, req, req.ownerBorrowerId());
+    }
 
+    /**
+     * Shared insert mechanics for {@link #add} and {@link #replaceForBorrowerInternal}: validate the 8
+     * money fields, assign a loan-global {@code nextOrdinal}, copy the request fields, and persist. The
+     * owner tag is passed explicitly ({@code ownerBorrowerId}) so the self-service seam can FORCE the
+     * caller's borrower id rather than trusting {@code req.ownerBorrowerId()}.
+     */
+    private RealEstateOwned insert(UUID loanId, AddReoRequest req, UUID ownerBorrowerId) {
         validate(req.marketValue(), req.grossMonthlyRentalIncome(),
                 req.monthlyTaxes(), req.monthlyInsurance(),
                 req.monthlyHoaDues(), req.monthlyMaintenance(),
@@ -84,7 +93,7 @@ public class ReoService {
 
         RealEstateOwned r = new RealEstateOwned();
         r.setLoanId(loanId);
-        r.setOwnerBorrowerId(req.ownerBorrowerId());
+        r.setOwnerBorrowerId(ownerBorrowerId);
         r.setOrdinal(nextOrdinal(loanId));
         r.setSubjectProperty(req.isSubjectProperty() != null && req.isSubjectProperty());
         r.setAddressLine1(req.addressLine1());
@@ -104,6 +113,30 @@ public class ReoService {
         r.setMortgageUnpaidBalance(req.mortgageUnpaidBalance());
         r.setMortgageMonthlyPayment(req.mortgageMonthlyPayment());
         return reo.save(r);
+    }
+
+    /**
+     * Privileged self-service write seam (Stage-2 borrower-self application): replace the caller's OWN
+     * REO rows on a loan WITHOUT the staff {@code assertCanAccess} loan gate. No-guard; caller authorizes
+     * via {@link LoanAccessGuard#assertBorrowerSelfWritable} (the {@code BorrowerApplicationService}
+     * orchestrator asserts it before invoking this). Used ONLY by that orchestrator; public {@link #add}/
+     * {@link #update}/{@link #delete} keep the staff gate unchanged.
+     *
+     * <p>Scope: deletes ONLY the rows tagged with this {@code borrowerId} ({@code findByLoanIdAndOwnerBorrowerId},
+     * tenant-scoped via {@code @TenantId} + RLS, loaded then {@code deleteAll} — never an unscoped bulk delete),
+     * so loan-level rows with a null owner or a DIFFERENT owner are left untouched. Each item is then re-added
+     * through the same {@link #insert} construction + {@link #validate} the public {@code add} uses, FORCING
+     * {@code ownerBorrowerId = borrowerId} and IGNORING {@code req.ownerBorrowerId()} (the body is not trusted).
+     * Ordinal stays loan-global ({@code max+1}). Runs in one transaction.
+     */
+    @Transactional
+    public List<RealEstateOwned> replaceForBorrowerInternal(UUID loanId, UUID borrowerId, List<AddReoRequest> items) {
+        reo.deleteAll(reo.findByLoanIdAndOwnerBorrowerId(loanId, borrowerId));
+        List<RealEstateOwned> saved = new java.util.ArrayList<>();
+        for (AddReoRequest req : items) {
+            saved.add(insert(loanId, req, borrowerId));
+        }
+        return saved;
     }
 
     @Transactional(readOnly = true)
