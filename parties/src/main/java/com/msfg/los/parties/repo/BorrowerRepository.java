@@ -22,6 +22,23 @@ public interface BorrowerRepository extends JpaRepository<BorrowerParty, UUID> {
     List<BorrowerParty> findByLoanIdInAndPrimaryTrue(Collection<UUID> loanIds);
 
     /**
+     * The caller's OWN borrower row on a loan, resolved by linked {@code user_id} (Cognito sub).
+     * Tenant-filtered by Hibernate {@code @TenantId}. {@code findFirst}/ordinal-ordered defensively:
+     * {@code borrower_party} has no {@code (loan_id, user_id)} uniqueness, so return the lowest-ordinal
+     * match rather than risk a non-unique-result error.
+     *
+     * <p>Drives {@code BorrowerService.findSelf} (Stage-2 borrower-self application resolution).
+     */
+    Optional<BorrowerParty> findFirstByLoanIdAndUserIdOrderByOrdinalAsc(UUID loanId, UUID userId);
+
+    /**
+     * The loan's PRIMARY borrower row (the intake-created applicant), lowest ordinal. Tenant-filtered
+     * by Hibernate {@code @TenantId}. Drives {@code BorrowerService.findPrimary} (the staff path of the
+     * borrower-self application endpoint).
+     */
+    Optional<BorrowerParty> findFirstByLoanIdAndPrimaryTrueOrderByOrdinalAsc(UUID loanId);
+
+    /**
      * Returns {@code true} when any borrower on {@code loanId} in the current tenant has
      * {@code userId} set to the given value. Tenant-filtered by Hibernate {@code @TenantId}.
      *

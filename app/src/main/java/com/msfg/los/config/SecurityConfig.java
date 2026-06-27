@@ -123,6 +123,17 @@ public class SecurityConfig {
                         "/api/loans/[0-9a-fA-F-]{36}/borrowers/[0-9a-fA-F-]{36}/"
                         + "(income|employments|assets|liabilities|declarations|demographics)(\\?.*)?"))
                     .hasAnyRole(STAFF_AND_BORROWER)
+                // ── Stage 2 — borrower-self application read + write (BORROWER, not agent) ────────
+                // The consolidated /apply surface: a borrower hydrates (GET) and saves (PUT) their OWN
+                // 1003 to the suite (system of record), co-equal with the staff console path. UUID-
+                // constrained loan id. The borrower-IS-this-row authorization is enforced in
+                // BorrowerApplicationService (assertBorrowerSelfReadable on GET, assertBorrowerSelfWritable
+                // on PUT); staff/owning-LO also pass (they target the primary borrower). This is the ONLY
+                // borrower-WRITABLE /api path — every other write stays in the staff-only catch-all below.
+                .requestMatchers(RegexRequestMatcher.regexMatcher(HttpMethod.GET,
+                        "/api/loans/[0-9a-fA-F-]{36}/application(\\?.*)?")).hasAnyRole(STAFF_AND_BORROWER)
+                .requestMatchers(RegexRequestMatcher.regexMatcher(HttpMethod.PUT,
+                        "/api/loans/[0-9a-fA-F-]{36}/application(\\?.*)?")).hasAnyRole(STAFF_AND_BORROWER)
                 // Staff-initiated borrower verification (security spec §6.2): send/verify a one-time
                 // code to a borrower. LO/PROCESSOR/MANAGER/ADMIN only — BORROWER + REAL_ESTATE_AGENT are
                 // excluded (a borrower must never trigger codes). The authoritative loan-access +

@@ -96,7 +96,11 @@ public class LiabilityService {
     @Transactional
     public Liability add(UUID loanId, UUID borrowerId, AddLiabilityRequest req) {
         assertBorrowerInLoan(loanId, borrowerId);
+        return insert(loanId, borrowerId, req);
+    }
 
+    /** Shared construction + validation + DTI-pairing + ordinal mechanics for {@link #add} and {@link #replaceForBorrowerInternal}. */
+    private Liability insert(UUID loanId, UUID borrowerId, AddLiabilityRequest req) {
         Liability l = new Liability();
         l.setLoanId(loanId);
         l.setBorrowerId(borrowerId);
@@ -115,6 +119,35 @@ public class LiabilityService {
         applyAndValidateDtiPairing(l);
 
         return liabilities.save(l);
+    }
+
+    /**
+     * No-guard self-service write seam (Stage-2 borrower-self application): REPLACE the borrower's
+     * entire liability set with {@code items}. Deletes the borrower's existing rows (loaded via
+     * {@code findByBorrowerIdOrderByOrdinalAscIdAsc} then {@code deleteAll} so org + RLS scoping
+     * holds — never an unscoped bulk delete), then re-adds each item through the SAME {@link #insert}
+     * mechanics the public {@link #add} uses (so {@link #validateValues} and
+     * {@link #applyAndValidateDtiPairing} — the includeInDti/exclusionReason pairing rule — run per
+     * row, and the max+1 ordinal logic re-derives 0..n-1 from the now-empty set; entity default
+     * {@code includeInDti = true}).
+     *
+     * <p>No-guard; caller authorizes via {@link LoanAccessGuard#assertBorrowerSelfWritable}. The
+     * {@code BorrowerApplicationService} orchestrator asserts that gate before invoking this. The
+     * public {@link #add}/{@link #update}/{@link #delete} keep their staff {@link #assertBorrowerInLoan}.
+     * Runs in one {@code @Transactional} method.
+     */
+    @Transactional
+    public List<Liability> replaceForBorrowerInternal(UUID loanId, UUID borrowerId, List<AddLiabilityRequest> items) {
+        List<Liability> existing = liabilities.findByBorrowerIdOrderByOrdinalAscIdAsc(borrowerId);
+        liabilities.deleteAll(existing);
+        liabilities.flush();
+        List<Liability> created = new java.util.ArrayList<>();
+        if (items != null) {
+            for (AddLiabilityRequest req : items) {
+                created.add(insert(loanId, borrowerId, req));
+            }
+        }
+        return created;
     }
 
     @Transactional(readOnly = true)

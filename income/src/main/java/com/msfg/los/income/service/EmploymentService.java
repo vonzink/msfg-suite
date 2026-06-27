@@ -82,6 +82,46 @@ public class EmploymentService {
         return employments.save(e);
     }
 
+    /**
+     * No-guard internal write seam (Stage-2 borrower-self application): insert an Employment row WITHOUT
+     * the staff {@link #assertBorrowerInLoan} loan gate. Authorization lives at the caller —
+     * {@code BorrowerApplicationService} asserts {@link LoanAccessGuard#assertBorrowerSelfWritable}
+     * (caller is staff/owning-LO, or a BORROWER editing their OWN row) before invoking this. Used ONLY by
+     * the borrower-application orchestrator; the public {@link #add} keeps the staff gate. Reuses the same
+     * {@link #nextOrdinal} + {@link #applyAndValidate} helpers as {@code add}, so insert mechanics and
+     * validation (ownershipShare↔selfEmployed pairing, PREVIOUS endDate rules) are identical.
+     */
+    @Transactional
+    public Employment addInternal(UUID loanId, UUID borrowerId, AddEmploymentRequest req) {
+        Employment e = new Employment();
+        e.setLoanId(loanId);
+        e.setBorrowerId(borrowerId);
+        e.setOrdinal(nextOrdinal(borrowerId));
+        applyAndValidate(e,
+                req.employerName(), req.employerPhone(),
+                req.employerAddressLine1(), req.employerAddressLine2(),
+                req.employerCity(), req.employerState(), req.employerPostalCode(),
+                req.positionTitle(), req.employmentStatus(), req.classification(),
+                req.selfEmployed(), req.ownershipShare(),
+                req.employedByPartyToTransaction(),
+                req.startDate(), req.endDate(), req.monthsInLineOfWork());
+        return employments.save(e);
+    }
+
+    /**
+     * No-guard internal delete seam (Stage-2 borrower-self application, full-replace): delete ALL of a
+     * borrower's Employment rows WITHOUT the staff {@link #assertBorrowerInLoan} loan gate. Authorization
+     * lives at the caller — {@code BorrowerApplicationService} asserts
+     * {@link LoanAccessGuard#assertBorrowerSelfWritable} before invoking. Loads the rows
+     * ({@code @TenantId}-filtered) then {@code deleteAll}, so org + RLS scoping holds (NOT an unscoped
+     * bulk delete). Caller must delete IncomeItems referencing these employments FIRST (FK order).
+     */
+    @Transactional
+    public void deleteAllForBorrowerInternal(UUID loanId, UUID borrowerId) {
+        List<Employment> rows = employments.findByBorrowerIdOrderByOrdinalAscIdAsc(borrowerId);
+        employments.deleteAll(rows);
+    }
+
     @Transactional(readOnly = true)
     public List<Employment> list(UUID loanId, UUID borrowerId) {
         assertBorrowerSelfReadable(loanId, borrowerId);

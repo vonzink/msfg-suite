@@ -9,6 +9,7 @@ import java.util.UUID;
 
 public interface RealEstateOwnedRepository extends JpaRepository<RealEstateOwned, UUID> {
     List<RealEstateOwned> findByLoanIdOrderByOrdinalAscIdAsc(UUID loanId);
+    List<RealEstateOwned> findByLoanIdAndOwnerBorrowerId(UUID loanId, UUID ownerBorrowerId);
     Optional<RealEstateOwned> findByIdAndOrgId(UUID id, UUID orgId);
     Optional<RealEstateOwned> findTopByLoanIdOrderByOrdinalDesc(UUID loanId);
 }

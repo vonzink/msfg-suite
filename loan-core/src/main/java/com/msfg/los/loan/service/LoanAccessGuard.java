@@ -128,11 +128,40 @@ public class LoanAccessGuard {
     }
 
     /**
+     * Per-borrower own-data WRITE predicate — the write-side mirror of
+     * {@link #assertBorrowerSelfReadable(Loan, UUID)}. Passes for staff-or-owning-LO (unchanged), OR a
+     * {@code ROLE_BORROWER} whose sub IS the {@code borrowerId} row being written
+     * ({@code linkageResolver.isBorrowerSelf}). Throws otherwise.
+     *
+     * <p>This is the ONLY predicate that admits a borrower to a mutation, and ONLY for their OWN
+     * borrower row — never a co-borrower's. A {@code REAL_ESTATE_AGENT} never passes (no role branch),
+     * and PLATFORM_ADMIN never passes (excluded from {@code isStaffOrOwningLo}).
+     *
+     * <p>Wired ONLY to the borrower-self application orchestrator (consolidated read/write of the
+     * caller's own 1003). Every pre-existing per-module write keeps the staff-only
+     * {@link #assertCanAccess(Loan)} / {@link #assertCanModify(Loan)} — this does NOT widen them.
+     */
+    public void assertBorrowerSelfWritable(Loan loan, UUID borrowerId) {
+        if (isStaffOrOwningLo(loan)) return;
+        UUID me = currentSubject();
+        if (me != null
+                && currentUser.roles().contains(Role.BORROWER.authority())
+                && loanLinkageResolver.isBorrowerSelf(borrowerId, me)) {
+            return;
+        }
+        throw new ForbiddenException("No write access to loan " + loan.getLoanNumber());
+    }
+
+    /**
      * Staff-or-owning-LO. Org-wide-view roles pass. The owning-LO branch requires BOTH the
      * {@code ROLE_LO} authority AND {@code sub == loan.loanOfficerId} — a borrower/agent whose sub
      * happened to equal a {@code loanOfficerId} must NOT be treated as the LO.
+     *
+     * <p>Public so orchestrators (e.g. {@code BorrowerApplicationService}) can branch on staff-ness
+     * BEFORE resolving a staff-only fallback target — keeping {@code assertBorrowerSelf*} as a true
+     * second layer rather than the sole gate. It is a pure predicate; it never mutates or throws.
      */
-    private boolean isStaffOrOwningLo(Loan loan) {
+    public boolean isStaffOrOwningLo(Loan loan) {
         if (hasOrgWideView()) return true;
         if (!currentUser.roles().contains(Role.LO.authority())) return false;
         UUID me = currentSubject();
