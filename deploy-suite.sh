@@ -15,7 +15,10 @@
 set -euo pipefail
 
 EC2_KEY="${EC2_KEY:-/Users/zacharyzink/MSFG/Security/msfg-mortgage-key.pem}"
-EC2_HOST="${EC2_HOST:-ubuntu@52.203.186.217}"
+# The SUITE runs on its OWN box now: los.msfgco.com -> 52.2.71.106 (NOT the old shared
+# 52.203.186.217 that serves app.msfgco.com / staging.msfg.us). Deploying to the old box is a
+# no-op for prod (2026-06-27 incident: a Stage-2 deploy landed there + prod stayed stale).
+EC2_HOST="${EC2_HOST:-ubuntu@52.2.71.106}"
 EC2_DIR="${EC2_DIR:-/home/ubuntu/apps/msfg-suite}"
 SSH="ssh -i $EC2_KEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25"
 cd "$(dirname "$0")"
