@@ -195,4 +195,29 @@ class BorrowerApplicationIT extends AbstractIntegrationTest {
                         .with(as(UUID.randomUUID().toString(), "ROLE_PROCESSOR", otherOrg)))
                 .andExpect(status().isNotFound());
     }
+
+    // ── hardening edges (security review follow-ups) ──────────────────────────────────────
+    @Test
+    void borrowerWithNonUuidSubjectForbidden() throws Exception {
+        String loan = createLoan();
+        addBorrower(loan, "Pat", true);
+        // Subject not a UUID → currentSubject() null → no self row → not staff → denied at the resolver.
+        mvc.perform(put("/api/loans/{l}/application", loan).with(as("not-a-uuid", "ROLE_BORROWER"))
+                        .contentType(MediaType.APPLICATION_JSON).content(APP_BODY))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void emptyPutIsNoOpEchoingCurrentState() throws Exception {
+        String loan = createLoan();
+        String me = UUID.randomUUID().toString();
+        String myId = addBorrower(loan, "Pat", true);
+        linkUser(loan, myId, me);
+        // Both blocks null → no writes → 200 echoing the current state (a plausible client call).
+        mvc.perform(put("/api/loans/{l}/application", loan).with(as(me, "ROLE_BORROWER"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.borrowerId").value(myId))
+                .andExpect(jsonPath("$.data.borrower.firstName").value("Pat"));
+    }
 }

@@ -156,8 +156,12 @@ public class LoanAccessGuard {
      * Staff-or-owning-LO. Org-wide-view roles pass. The owning-LO branch requires BOTH the
      * {@code ROLE_LO} authority AND {@code sub == loan.loanOfficerId} — a borrower/agent whose sub
      * happened to equal a {@code loanOfficerId} must NOT be treated as the LO.
+     *
+     * <p>Public so orchestrators (e.g. {@code BorrowerApplicationService}) can branch on staff-ness
+     * BEFORE resolving a staff-only fallback target — keeping {@code assertBorrowerSelf*} as a true
+     * second layer rather than the sole gate. It is a pure predicate; it never mutates or throws.
      */
-    private boolean isStaffOrOwningLo(Loan loan) {
+    public boolean isStaffOrOwningLo(Loan loan) {
         if (hasOrgWideView()) return true;
         if (!currentUser.roles().contains(Role.LO.authority())) return false;
         UUID me = currentSubject();

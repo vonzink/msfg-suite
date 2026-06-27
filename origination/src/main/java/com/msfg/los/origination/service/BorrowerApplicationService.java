@@ -10,6 +10,7 @@ import com.msfg.los.origination.web.dto.BorrowerApplicationResponse;
 import com.msfg.los.parties.domain.BorrowerParty;
 import com.msfg.los.parties.service.BorrowerService;
 import com.msfg.los.parties.web.dto.UpdateBorrowerRequest;
+import com.msfg.los.platform.error.ForbiddenException;
 import com.msfg.los.platform.error.NotFoundException;
 import com.msfg.los.platform.security.CurrentUser;
 import org.springframework.stereotype.Service;
@@ -56,7 +57,7 @@ public class BorrowerApplicationService {
     @Transactional(readOnly = true)
     public BorrowerApplicationResponse get(UUID loanId) {
         Loan loan = loanService.get(loanId);
-        BorrowerParty target = resolveTarget(loanId);
+        BorrowerParty target = resolveTarget(loan);
         accessGuard.assertBorrowerSelfReadable(loan, target.getId());
         return toResponse(loan, target);
     }
@@ -65,9 +66,13 @@ public class BorrowerApplicationService {
     @Transactional
     public BorrowerApplicationResponse upsert(UUID loanId, BorrowerApplicationRequest req) {
         Loan loan = loanService.get(loanId);
-        BorrowerParty target = resolveTarget(loanId);
+        BorrowerParty target = resolveTarget(loan);
         accessGuard.assertBorrowerSelfWritable(loan, target.getId());
 
+        // NOTE: the borrower ROW is self-scoped (target = the caller's own row). The loan §4 block is
+        // loan-scoped (shared) — a co-borrower who passes the self-row guard may also set shared loan
+        // fields (address/value/price/amounts) over the LO/primary's values (last-write-wins). This is
+        // intentional for a JOINT LO+borrower application; staff-only/pricing/UW fields stay null-guarded.
         Loan updatedLoan = (req.loan() != null)
             ? loanService.update(loanId, toUpdateLoanRequest(req.loan()))
             : loan;
@@ -79,15 +84,21 @@ public class BorrowerApplicationService {
     }
 
     /**
-     * Resolve the borrower row the caller acts on: their OWN row (by linked sub) if present, else the
-     * loan's PRIMARY borrower (the staff path). Both reads are no-guard; the caller-side
-     * {@code assertBorrowerSelf*} on the returned id is what authorizes.
+     * Resolve the borrower row the caller acts on: their OWN row (by linked sub) if present, else —
+     * for STAFF/owning-LO ONLY — the loan's PRIMARY borrower. A party with no self row is denied HERE
+     * (defense in depth) so {@code assertBorrowerSelf*} on the resolved id is a true SECOND layer, not
+     * the sole gate: a future refactor that drops or reorders the guard can never silently hand a
+     * borrower the primary's row. Both reads are no-guard seams.
      */
-    private BorrowerParty resolveTarget(UUID loanId) {
+    private BorrowerParty resolveTarget(Loan loan) {
         UUID sub = currentSubject();
-        Optional<BorrowerParty> self = (sub != null) ? borrowerService.findSelf(loanId, sub) : Optional.empty();
-        return self.or(() -> borrowerService.findPrimary(loanId))
-            .orElseThrow(() -> new NotFoundException("Borrower for loan", loanId));
+        Optional<BorrowerParty> self = (sub != null) ? borrowerService.findSelf(loan.getId(), sub) : Optional.empty();
+        if (self.isPresent()) return self.get();
+        if (!accessGuard.isStaffOrOwningLo(loan)) {
+            throw new ForbiddenException("No access to loan " + loan.getLoanNumber());
+        }
+        return borrowerService.findPrimary(loan.getId())
+            .orElseThrow(() -> new NotFoundException("Borrower for loan", loan.getId()));
     }
 
     private UUID currentSubject() {
