@@ -134,6 +134,22 @@ public class SecurityConfig {
                         "/api/loans/[0-9a-fA-F-]{36}/application(\\?.*)?")).hasAnyRole(STAFF_AND_BORROWER)
                 .requestMatchers(RegexRequestMatcher.regexMatcher(HttpMethod.PUT,
                         "/api/loans/[0-9a-fA-F-]{36}/application(\\?.*)?")).hasAnyRole(STAFF_AND_BORROWER)
+                // ── Cutover slice 1 — borrower-self document upload into the suite DMS (BORROWER, not
+                // agent) ──────────────────────────────────────────────────────────────────────────
+                // A linked borrower uploads/confirms/lists/downloads THEIR OWN documents into the
+                // system of record, so staff processing/UW see them. UUID-anchored; distinct from the
+                // staff-only /api/loans/{id}/documents surface. Per-row authorization (borrower-on-loan
+                // + own-document = audit createdBy) is enforced in BorrowerDocumentService;
+                // staff/owning-LO also pass. These are the only borrower document paths — every staff
+                // document path (list/search/patch/move/review/delete) stays in the staff-only catch-all.
+                .requestMatchers(RegexRequestMatcher.regexMatcher(HttpMethod.POST,
+                        "/api/loans/[0-9a-fA-F-]{36}/borrower/documents/upload-url(\\?.*)?")).hasAnyRole(STAFF_AND_BORROWER)
+                .requestMatchers(RegexRequestMatcher.regexMatcher(HttpMethod.PUT,
+                        "/api/loans/[0-9a-fA-F-]{36}/borrower/documents/[0-9a-fA-F-]{36}/confirm(\\?.*)?")).hasAnyRole(STAFF_AND_BORROWER)
+                .requestMatchers(RegexRequestMatcher.regexMatcher(HttpMethod.GET,
+                        "/api/loans/[0-9a-fA-F-]{36}/borrower/documents(\\?.*)?")).hasAnyRole(STAFF_AND_BORROWER)
+                .requestMatchers(RegexRequestMatcher.regexMatcher(HttpMethod.GET,
+                        "/api/loans/[0-9a-fA-F-]{36}/borrower/documents/[0-9a-fA-F-]{36}/download-url(\\?.*)?")).hasAnyRole(STAFF_AND_BORROWER)
                 // Staff-initiated borrower verification (security spec §6.2): send/verify a one-time
                 // code to a borrower. LO/PROCESSOR/MANAGER/ADMIN only — BORROWER + REAL_ESTATE_AGENT are
                 // excluded (a borrower must never trigger codes). The authoritative loan-access +

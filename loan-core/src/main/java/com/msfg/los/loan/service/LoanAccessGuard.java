@@ -153,6 +153,26 @@ public class LoanAccessGuard {
     }
 
     /**
+     * Loan-level BORROWER predicate — passes for staff-or-owning-LO, OR a {@code ROLE_BORROWER}
+     * linked to THIS loan ({@code loanLinkageResolver.isBorrowerOnLoan}). Throws otherwise.
+     *
+     * <p>Narrower than {@link #assertReadable(Loan)}: a {@code REAL_ESTATE_AGENT} never passes (no
+     * agent branch) and PLATFORM_ADMIN never passes (excluded from {@code isStaffOrOwningLo}). Wired
+     * ONLY to the borrower-self document seam (a borrower uploading/listing/downloading their OWN
+     * documents on a loan they're on); the per-document own-row check is layered on top in the service.
+     */
+    public void assertBorrowerOnLoan(Loan loan) {
+        if (isStaffOrOwningLo(loan)) return;
+        UUID me = currentSubject();
+        if (me != null
+                && currentUser.roles().contains(Role.BORROWER.authority())
+                && loanLinkageResolver.isBorrowerOnLoan(loan.getId(), me)) {
+            return;
+        }
+        throw new ForbiddenException("No access to loan " + loan.getLoanNumber());
+    }
+
+    /**
      * Staff-or-owning-LO. Org-wide-view roles pass. The owning-LO branch requires BOTH the
      * {@code ROLE_LO} authority AND {@code sub == loan.loanOfficerId} — a borrower/agent whose sub
      * happened to equal a {@code loanOfficerId} must NOT be treated as the LO.

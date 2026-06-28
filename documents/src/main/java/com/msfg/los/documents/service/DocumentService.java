@@ -121,7 +121,16 @@ public class DocumentService {
     public UploadUrl createUploadUrl(UUID loanId, UploadUrlRequest req) {
         Loan loan = loanService.get(loanId);
         accessGuard.assertCanAccess(loan);
+        return doCreateUploadUrl(loanId, loan, req);
+    }
 
+    /**
+     * Guard-free upload-url seam — creates the {@code PENDING_UPLOAD} row + presigns the PUT. The
+     * CALLER is responsible for authorization (staff via {@link #createUploadUrl}; a linked borrower
+     * via {@code BorrowerDocumentService}). Shares the staff flow with the borrower-self seam without
+     * widening the staff-only guard. {@code createdBy} is auto-stamped (audit) with the caller's sub.
+     */
+    UploadUrl doCreateUploadUrl(UUID loanId, Loan loan, UploadUrlRequest req) {
         DocumentTypeCatalog type = null;
         if (req.documentTypeId() != null) {
             type = documentTypes.findByIdAndOrgId(req.documentTypeId(), tenantContext.requireOrgId())
@@ -160,6 +169,14 @@ public class DocumentService {
     @Transactional
     public Document confirm(UUID loanId, UUID docId) {
         accessGuard.assertCanAccess(loanService.get(loanId));
+        return doConfirm(loanId, docId, "staff_upload");
+    }
+
+    /**
+     * Guard-free confirm seam (caller authorizes). {@code source} tags the stored object's provenance
+     * ({@code staff_upload} vs {@code borrower_upload}).
+     */
+    Document doConfirm(UUID loanId, UUID docId, String source) {
         Document doc = loadLive(loanId, docId);
 
         long size = objectStorage.headSize(doc.getStorageKey());
@@ -183,7 +200,7 @@ public class DocumentService {
         objectStorage.tag(doc.getStorageKey(), Map.of(
                 "sensitivity", "confidential",
                 "retention_class", "standard",
-                "source", "staff_upload",
+                "source", source,
                 "application_id", loanId.toString(),
                 "loan_id", loanId.toString()));
         doc.setDocumentStatus(DocumentStatus.UPLOADED);
@@ -199,10 +216,32 @@ public class DocumentService {
     @Transactional(readOnly = true)
     public DownloadUrl downloadUrl(UUID loanId, UUID docId) {
         accessGuard.assertCanAccess(loanService.get(loanId));
+        return doDownloadUrl(loanId, docId);
+    }
+
+    /** Guard-free download seam (caller authorizes). */
+    DownloadUrl doDownloadUrl(UUID loanId, UUID docId) {
         Document doc = loadLive(loanId, docId);
         String filename = doc.getFileName() != null ? doc.getFileName() : "download";
         String url = objectStorage.presignDownload(doc.getStorageKey(), filename, DOWNLOAD_TTL);
         return new DownloadUrl(url, DOWNLOAD_TTL.toSeconds());
+    }
+
+    /**
+     * Guard-free: confirmed, non-deleted docs in the loan CREATED BY {@code creatorSub} (the audit
+     * {@code createdBy} = the uploader's sub), newest first. The CALLER authorizes loan access; this
+     * scopes to the caller's OWN uploads. Used by {@code BorrowerDocumentService}.
+     */
+    List<Document> listOwnedByCreator(UUID loanId, String creatorSub) {
+        Specification<Document> spec = DocumentSpecifications.inLoanNotDeleted(loanId)
+                .and(DocumentSpecifications.confirmedOnly())
+                .and(DocumentSpecifications.uploadedBy(creatorSub));
+        return documents.findAll(spec, Sort.by(Sort.Direction.DESC, "createdAt"));
+    }
+
+    /** Guard-free single live doc load (caller authorizes). 404 if missing/foreign-loan/deleted. */
+    Document requireLiveDoc(UUID loanId, UUID docId) {
+        return loadLive(loanId, docId);
     }
 
     // ── list + faceted search (query-side) ─────────────────────────────────────────────────

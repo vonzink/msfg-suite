@@ -26,6 +26,8 @@ public record DocumentResponse(
         DocumentStatus documentStatus,
         UUID folderId,
         String description,
+        /** The sub of the principal who created (uploaded) this document — the audit createdBy. */
+        String uploadedBy,
         String reviewedBy,
         String reviewerNotes,
         Instant reviewedAt,
@@ -49,6 +51,7 @@ public record DocumentResponse(
                 d.getDocumentStatus(),
                 d.getFolderId(),
                 d.getDescription(),
+                d.getCreatedBy(),
                 d.getReviewedBy(),
                 d.getReviewerNotes(),
                 d.getReviewedAt(),
