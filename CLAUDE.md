@@ -83,8 +83,14 @@ reasonable calls, he'll redirect. Verify by running the thing, not just assertin
   (`FORCE` + `WITH CHECK`, fail-closed) — a **proven backstop that only engages when the app connects as a
   non-owner DB role**. ⚠️ **DEPLOYMENT REQUIREMENT:** in dev/prod, run the app's datasource as a
   **non-owner role** (the seeded `app_user`, given a login/password out-of-band) with **Flyway as the
-  owner**, or RLS is bypassed at runtime (today the app connects as owner → app-layer only). A
+  owner**, or RLS is bypassed at runtime. A
   large/regulated tenant can later be promoted to a dedicated schema/DB without app changes.
+  - **RLS GUC coverage (`0b59ada`, 2026-06-27):** the `app.current_org` GUC the RLS policy reads is now
+    set at **connection acquisition** for EVERY pooled connection — `platform.tenancy.GucConnectionDataSource`
+    (a DataSource decorator wired by `GucDataSourceWrapperBeanPostProcessor`) stamps it from
+    `TenantContextHolder` (org, or empty=fail-closed) on `getConnection()`, so **non-transactional** queries
+    (e.g. controller-layer party-guard linkage checks) are tenant-scoped too. `TenantRlsAspect` (tx-local set
+    on `@Transactional`) is kept as defense-in-depth. Always-stamp-on-acquire is the isolation invariant.
   - *Spec-2 follow-ups:* engage RLS at runtime (non-owner datasource); `BorrowerService` self-scoping
     `findByIdAndOrgId`; reject JWTs with no `org_id` claim (avoid NIL-org writes); ADMIN-role cross-tenant test.
 - **Portability:** external services behind ports with swappable adapters — storage
