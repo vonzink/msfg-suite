@@ -239,6 +239,35 @@ class RoleAccessIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void linkedBorrowerCanReadOwnLoanStatusHistory() throws Exception {
+        String id = createLoanOwnedByLoA();
+        String borrowerSub = UUID.randomUUID().toString();
+        addLinkedBorrower(id, borrowerSub);
+        mvc.perform(get("/api/loans/{id}/status/history", id).with(as(borrowerSub, "ROLE_BORROWER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isArray());
+    }
+
+    @Test
+    void statusHistoryRecordsTransitions_andLinkedBorrowerSeesThem() throws Exception {
+        String id = createLoanOwnedByLoA();
+        String borrowerSub = UUID.randomUUID().toString();
+        addLinkedBorrower(id, borrowerSub);
+
+        // Owning LO advances the loan → a history row is written.
+        mvc.perform(post("/api/loans/{id}/status", id).with(as(LO_A, "ROLE_LO"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"targetStatus\":\"APPLICATION_IN_PROGRESS\"}"))
+                .andExpect(status().isOk());
+
+        // The borrower sees the milestone in their timeline (status + effective time).
+        mvc.perform(get("/api/loans/{id}/status/history", id).with(as(borrowerSub, "ROLE_BORROWER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.status == 'APPLICATION_IN_PROGRESS')]").exists())
+                .andExpect(jsonPath("$.data[0].transitionedAt").exists());
+    }
+
+    @Test
     void linkedBorrowerCanReachMe() throws Exception {
         String borrowerSub = UUID.randomUUID().toString();
         mvc.perform(get("/api/me").with(as(borrowerSub, "ROLE_BORROWER")))

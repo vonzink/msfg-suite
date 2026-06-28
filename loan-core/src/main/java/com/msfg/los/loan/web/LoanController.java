@@ -145,6 +145,16 @@ public class LoanController {
             lifecycle.allowedTransitions(loan.getStatus(), currentUser.roles())));
     }
 
+    @Operation(operationId = "getLoanStatusHistory")
+    @GetMapping("/{id}/status/history")
+    public ApiResponse<List<StatusHistoryItemResponse>> statusHistory(@PathVariable UUID id) {
+        Loan loan = service.get(id);
+        accessGuard.assertReadable(loan);   // read allowlist: staff/owning-LO OR linked borrower/agent
+        return ApiResponse.ok(service.history(id).stream()
+                .map(StatusHistoryItemResponse::from)
+                .toList());
+    }
+
     @Operation(operationId = "transitionLoanStatus")
     @PostMapping("/{id}/status")
     public ApiResponse<LoanSummaryResponse> transition(@PathVariable UUID id, @Valid @RequestBody TransitionRequest req) {

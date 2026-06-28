@@ -109,6 +109,10 @@ public class SecurityConfig {
                         HttpMethod.GET, "/api/loans/[0-9a-fA-F-]{36}(\\?.*)?")).hasAnyRole(STAFF_AND_PARTY)
                 .requestMatchers(RegexRequestMatcher.regexMatcher(
                         HttpMethod.GET, "/api/loans/[0-9a-fA-F-]{36}/status/transitions(\\?.*)?")).hasAnyRole(STAFF_AND_PARTY)
+                // The loan's status milestone timeline — same read allowlist as the summary + transitions
+                // (staff/owning-LO OR linked borrower/agent; per-row re-checked via assertReadable).
+                .requestMatchers(RegexRequestMatcher.regexMatcher(
+                        HttpMethod.GET, "/api/loans/[0-9a-fA-F-]{36}/status/history(\\?.*)?")).hasAnyRole(STAFF_AND_PARTY)
                 // ── Phase F T11 — per-borrower own-data GET reads (BORROWER, not agent) ──────────
                 // The borrower's OWN per-borrower 1003 sections. UUID-constrained on BOTH the loan id
                 // and the borrower id; the section is one of the six in-scope read controllers. The
