@@ -1,6 +1,10 @@
 # Plan — RLS GUC coverage for ALL DB access (option B: connection-level `app.current_org`)
 
-**Created:** 2026-06-27 · **Status:** TODO (start in a fresh session) · **Owner-chosen:** option B (connection-provider), TDD + redeploy.
+**Created:** 2026-06-27 · **Status:** ✅ DONE — merged to `main` `0b59ada` (2026-06-27). · **Owner-chosen:** option B (connection-provider), TDD + redeploy.
+
+> **Implemented (option B, DataSource-proxy form):** chose the plan's sanctioned **fallback** over the Hibernate `MultiTenantConnectionProvider` recommendation, because `OrgTenantResolver` (a `CurrentTenantIdentifierResolver`) is already wired for `@TenantId` discriminator multitenancy and a connection-provider would have risked interacting with it / only covered Hibernate-issued connections. `platform.tenancy.GucConnectionDataSource` decorates the DataSource (via `GucDataSourceWrapperBeanPostProcessor`) and stamps the **session** GUC `app.current_org` (`set_config(..., false)`) from `TenantContextHolder` on EVERY connection acquisition — org if present, else empty (fail-closed) — so transactional AND non-transactional statements are covered uniformly, below Hibernate. Always-stamp-on-acquire is the isolation invariant; reset-on-release is best-effort; the stamp is committed when autoCommit is off so a rollback can't revert it. `TenantRlsAspect` kept as defense-in-depth. **No new migration.** Tests: `GucConnectionDataSourceRlsIT` (mechanism, fail-closed, no-leak, rollback-durable) + `BorrowerPortalRlsIT` (app datasource runs AS `app_user`, Flyway as owner → linked borrower `GET /loans/{id}`=200 + `/me/loans` present; unlinked=403; cross-tenant=404) — both proven RED with the wrapper disabled, GREEN enabled. Adversarial security review: GO_WITH_FIXES (no CRITICAL); M1/M2/M3 applied. 665 app tests + full build green.
+>
+> **Remaining (prod, owner-gated):** redeploy `main` to `52.2.71.106`, then live-verify a fresh funnel borrower's `/me/loans`/loan-summary reads. Plus the test-data cleanup below.
 
 ## The bug (root-caused, with live evidence)
 Postgres RLS policy on the tenant tables is **fail-closed**:
